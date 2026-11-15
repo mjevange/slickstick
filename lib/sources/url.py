@@ -21,7 +21,9 @@ class UrlSource(Source):
         self.url = url
 
     def space_needed(self) -> int:
-        return 33 * 1024 ** 3   # ~14 GB pkg download + ~17 GB extracted app + slack
+        # Current two-stage extract materializes pkg (~14) + Payload (~14) +
+        # app (~17). A future streaming extractor would cut this to ~17.
+        return 46 * 1024 ** 3
 
     def obtain(self, workdir: Path, version: str | None = None) -> Path:
         if not self.url.lower().endswith(".pkg"):

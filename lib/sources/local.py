@@ -21,8 +21,9 @@ class LocalSource(Source):
         self.path = Path(path).expanduser()
 
     def space_needed(self) -> int:
-        # A .pkg must be extracted (~17 GB app); an existing app is used in place.
-        return 18 * 1024 ** 3 if self.path.suffix == ".pkg" else 0
+        # A .pkg is extracted two-stage: Payload (~14) + app (~17) in the work
+        # dir (the pkg itself lives elsewhere). An existing app is used in place.
+        return 31 * 1024 ** 3 if self.path.suffix == ".pkg" else 0
 
     def obtain(self, workdir: Path, version: str | None = None) -> Path:
         p = self.path
