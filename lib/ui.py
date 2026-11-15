@@ -28,9 +28,45 @@ YELLOW = _c("\033[33m")
 CYAN = _c("\033[36m")
 
 
+_BANNER = r"""
+  ____  _ _      _     ____  _   _      _
+ / ___|| (_) ___| | __/ ___|| |_(_) ___| | __
+ \___ \| | |/ __| |/ /\___ \| __| |/ __| |/ /
+  ___) | | | (__|   < \___ \| |_| | (__|   <
+ |____/|_|_|\___|_|\_\|____/ \__|_|\___|_|\_\
+"""
+
+_REPO_URL = "https://github.com/mjevange/slickstick"
+
+
+def link(text: str, url: str) -> str:
+    """A clickable terminal hyperlink (OSC 8) when interactive; else 'text (url)'."""
+    if _TTY:
+        return f"\033]8;;{url}\033\\{text}\033]8;;\033\\"
+    return f"{text} ({url})"
+
+
+def banner() -> None:
+    """The initial splash: ASCII wordmark, tagline, clickable repo link."""
+    art = _BANNER.strip("\n")
+    for line in art.splitlines():
+        print(f"{BOLD}{CYAN}{line}{RESET}")
+    print(f"  {BOLD}Build bootable macOS installer USBs{RESET} {DIM}— without a Mac{RESET}")
+    print(f"  {DIM}{link('github.com/mjevange/slickstick', _REPO_URL)}{RESET}")
+    print()
+
+
 # --- messages ---------------------------------------------------------------
 def title(text: str) -> None:
     print(f"{BOLD}{CYAN}{text}{RESET}")
+
+
+def heading(text: str) -> None:
+    print(f"{BOLD}{text}{RESET}")
+
+
+def option(i: int, text: str) -> str:
+    return f"  {CYAN}{BOLD}{i}{RESET}) {text}"
 
 
 def step(n: int, total: int, text: str) -> None:
