@@ -193,8 +193,15 @@ is intended for creating install media for Macs you own. macOS is © Apple.
 
 ## Credits
 
-- [corpnewt/gibMacOS](https://github.com/corpnewt/gibMacOS) — the catalog downloader (MIT)
-- The Asahi Linux project — the best public reference on Apple Silicon boot internals
+**Depends on**
+
+- [corpnewt/gibMacOS](https://github.com/corpnewt/gibMacOS) — downloads macOS installers from Apple (MIT)
+
+**Prior art & inspiration** (ideas followed, not code bundled)
+
+- The [Asahi Linux](https://asahilinux.org) project — the best public reference on Apple Silicon boot internals
+- The one-line installer convention of [Homebrew](https://brew.sh), [rustup](https://rustup.rs), and [Oh My Zsh](https://ohmyz.sh) — the `bash <(curl …)` / `bash -c "$(curl …)"` bootstrap
+- The `/dev/tty` idiom for keeping prompts interactive even under `curl | bash`
 
 ## License
 
