@@ -18,7 +18,7 @@ from pathlib import Path
 # Make `lib` importable no matter the current working directory.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from lib import deps, usb
+from lib import deps, usb, ui
 from lib.sources import (
     make_source, GibMacOSSource, StickSource, LocalSource, UrlSource,
     find_installer_volumes,
@@ -65,7 +65,7 @@ def _pick_device(disks: list[dict]) -> str | None:
 
 def _confirm_wipe(target: str, assume_yes: bool) -> bool:
     import subprocess
-    print(f"\nAbout to ERASE {target}:")
+    ui.danger(f"\nAbout to ERASE {target}:")
     subprocess.run(["lsblk", "-o", "NAME,SIZE,TYPE,LABEL,FSTYPE,MOUNTPOINT", target])
     if assume_yes:
         return True
@@ -171,7 +171,8 @@ def _execute_build(target: str, source, arch: str, reference_stick: str | None,
             _umount_reference(reference_root)
         source.cleanup()
 
-    print(f"\nFinished. Test by booting {target} on the target Mac (hold power -> Options).")
+    print()
+    ui.ok(f"Finished. Test by booting {target} on the target Mac (hold power -> Options).")
     return 0
 
 
@@ -192,13 +193,15 @@ def cmd_build(args) -> int:
 
 def cmd_wizard(args) -> int:
     """Guided, menu-driven build — the default when no subcommand is given."""
-    print("SlickStick — build a bootable macOS installer USB, no Mac needed.\n")
+    ui.title("SlickStick — build a bootable macOS installer USB, no Mac needed.")
+    print()
     if deps.missing():
-        print("Some required tools are missing:\n")
+        ui.warn("Some required tools are missing:\n")
         deps.check(verbose=True)
         print("\nInstall the tools listed above, then run SlickStick again.")
         return 1
-    print("Dependencies OK.\n")
+    ui.ok("Dependencies OK.")
+    print()
 
     print("\nHow should SlickStick get macOS?")
     pick = _menu([

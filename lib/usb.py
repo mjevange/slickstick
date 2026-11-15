@@ -14,7 +14,7 @@ import subprocess
 import threading
 from pathlib import Path
 
-from . import payload
+from . import payload, ui
 
 HFS_TYPE = "AF00"   # sgdisk alias: Apple HFS/HFS+
 ESP_TYPE = "EF00"   # sgdisk alias: EFI system partition
@@ -122,7 +122,7 @@ class SudoKeepAlive:
 
 
 def _run(cmd: list[str]) -> None:
-    print("  $ " + " ".join(cmd))
+    ui.cmd(" ".join(cmd))
     subprocess.run(cmd, check=True)
 
 
@@ -148,7 +148,7 @@ def unmount_disk(disk: str) -> None:
                          capture_output=True, text=True).stdout
     def walk(dev: dict) -> None:
         if dev.get("mountpoint"):
-            print(f"  unmounting {dev['path']} ({dev['mountpoint']})")
+            ui.info(f"unmounting {dev['path']} ({dev['mountpoint']})")
             _umount_path(dev["path"])
         for child in dev.get("children") or []:
             walk(child)
@@ -161,7 +161,7 @@ def unmount_if_mounted(part: str) -> None:
     mp = subprocess.run(["lsblk", "-no", "MOUNTPOINT", part],
                         capture_output=True, text=True).stdout.strip()
     if mp:
-        print(f"  unmounting {part} ({mp})")
+        ui.info(f"unmounting {part} ({mp})")
         _umount_path(part)
 
 
@@ -210,22 +210,28 @@ def copy_installer(hfs_part: str, app_dir: Path, work: Path,
     unmount_if_mounted(hfs_part)   # udisks may auto-mount the freshly formatted volume
     _mount(hfs_part, dst, ro=False)
     try:
-        print(f"  copying {app_dir.name} (this is the slow part)")
-        _run(["sudo", "cp", "-a", str(app_dir), str(dst) + "/"])
+        total = ui.du_bytes(str(app_dir))
+        ui.info(f"copying {app_dir.name} — {ui.human(total)}")
+        rc = ui.run_with_progress(
+            ["sudo", "cp", "-a", str(app_dir), str(dst) + "/"],
+            str(dst), total, label="copy",
+        )
+        if rc != 0:
+            raise BuildError("copying the installer app failed")
         app_on_vol = dst / app_dir.name
         if reference_root is not None:
             copied = payload.copy_markers_from_stick(reference_root, dst)
-            print(f"  copied real root markers from reference stick: {copied}")
+            ui.ok(f"copied real root markers: {', '.join(copied)}")
         else:
             payload.write_markers_from_app(app_on_vol, dst)
-            print("  synthesized root markers (.IAPhysicalMedia, restore/) from app")
+            ui.ok("synthesized root markers (.IAPhysicalMedia, restore/)")
         subprocess.run(["sudo", "sync"])
     finally:
         _umount(dst)
 
 
 def verify(hfs_part: str) -> bool:
-    print("  fsck.hfsplus:")
+    ui.info("fsck.hfsplus:")
     rc = subprocess.run(["sudo", "fsck.hfsplus", "-f", hfs_part]).returncode
     return rc == 0
 
@@ -233,15 +239,17 @@ def verify(hfs_part: str) -> bool:
 def build(target: str, app_dir: Path, work: Path, hfs_label: str,
           journaled: bool = False, reference_root: Path | None = None) -> None:
     """Full Apple Silicon build pipeline."""
-    print(">>> [1/4] Partitioning (GPT: ESP + Apple HFS+)")
+    ui.step(1, 4, "Partitioning (GPT: ESP + Apple HFS+)")
     esp, hfs = partition(target, hfs_label)
-    print(">>> [2/4] Formatting (empty ESP + HFS+)")
+    ui.step(2, 4, "Formatting (empty ESP + HFS+)")
     format_parts(esp, hfs, hfs_label, journaled=journaled)
-    print(">>> [3/4] Copying installer content")
+    ui.step(3, 4, "Copying installer content")
     copy_installer(hfs, app_dir, work, reference_root=reference_root)
-    print(">>> [4/4] Verifying")
-    ok = verify(hfs)
-    print("Done." if ok else "Done (fsck reported issues — inspect before use).")
+    ui.step(4, 4, "Verifying")
+    if verify(hfs):
+        ui.ok("Volume verified.")
+    else:
+        ui.warn("fsck reported issues — inspect before use.")
 
 
 # --------------------------------------------------------------------------- #
