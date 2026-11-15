@@ -51,9 +51,10 @@ def cmd_devices(args) -> int:
 
 
 def _pick_device(disks: list[dict]) -> str | None:
-    print("Removable / USB disks:")
+    ui.heading("Removable / USB disks:")
     for i, d in enumerate(disks):
-        print(f"  [{i}] /dev/{d['name']:<6} {_human(d['size']):>9}  {(d.get('model') or '').strip()}")
+        idx = f"{ui.CYAN}{ui.BOLD}[{i}]{ui.RESET}"
+        print(f"  {idx} /dev/{d['name']:<6} {_human(d['size']):>9}  {(d.get('model') or '').strip()}")
     try:
         sel = input("Pick the TARGET disk to ERASE (number, or blank to cancel): ").strip()
     except EOFError:
@@ -78,7 +79,7 @@ def _confirm_wipe(target: str, assume_yes: bool) -> bool:
 
 def _menu(options: list[str], prompt: str = "Choose") -> int:
     for i, opt in enumerate(options, 1):
-        print(f"  {i}) {opt}")
+        print(ui.option(i, opt))
     while True:
         try:
             sel = input(f"{prompt} [1-{len(options)}]: ").strip()
@@ -193,8 +194,7 @@ def cmd_build(args) -> int:
 
 def cmd_wizard(args) -> int:
     """Guided, menu-driven build — the default when no subcommand is given."""
-    ui.title("SlickStick — build a bootable macOS installer USB, no Mac needed.")
-    print()
+    ui.banner()
     if deps.missing():
         ui.warn("Some required tools are missing:\n")
         deps.check(verbose=True)
@@ -203,7 +203,7 @@ def cmd_wizard(args) -> int:
     ui.ok("Dependencies OK.")
     print()
 
-    print("\nHow should SlickStick get macOS?")
+    ui.heading("\nHow should SlickStick get macOS?")
     pick = _menu([
         "Download from Apple via gibMacOS (recommended)",
         "Clone from an inserted macOS installer stick (real markers, proven)",
@@ -219,7 +219,7 @@ def cmd_wizard(args) -> int:
             print("  No inserted macOS installer sticks detected. Insert one and")
             print("  restart SlickStick, or choose a different source.")
             return 1
-        print("\n  Detected installer sticks:")
+        ui.heading("\n  Detected installer sticks:")
         opts = []
         for v in vols:
             where = v["mountpoint"] or "not mounted"
@@ -232,7 +232,7 @@ def cmd_wizard(args) -> int:
     else:
         source = UrlSource(input("  InstallAssistant.pkg URL: ").strip())
 
-    print("\nTarget Mac architecture?")
+    ui.heading("\nTarget Mac architecture?")
     arch = "silicon" if _menu([
         "Apple Silicon (M1/M2/M3/… — proven)",
         "Intel (EXPERIMENTAL — not verified to boot)",
@@ -240,7 +240,7 @@ def cmd_wizard(args) -> int:
     if arch == "intel":
         print("  ! Intel is experimental and unverified; continuing anyway.")
 
-    print("\nNow pick the TARGET USB to erase.")
+    ui.heading("\nNow pick the TARGET USB to erase.")
     target = _choose_target(exclude=source_disk)
     if not target:
         print("Cancelled.")
