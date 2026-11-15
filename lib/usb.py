@@ -85,8 +85,38 @@ def _run(cmd: list[str]) -> None:
     subprocess.run(cmd, check=True)
 
 
+def _umount_path(path: str) -> None:
+    """Best-effort unmount: plain, then lazy. Desktop (udisks) auto-mounts often."""
+    if subprocess.run(["sudo", "umount", path]).returncode != 0:
+        subprocess.run(["sudo", "umount", "-l", path])
+
+
+def unmount_disk(disk: str) -> None:
+    """Unmount every mounted partition of a whole disk so it isn't 'busy'."""
+    out = subprocess.run(["lsblk", "-J", "-o", "PATH,MOUNTPOINT", disk],
+                         capture_output=True, text=True).stdout
+    def walk(dev: dict) -> None:
+        if dev.get("mountpoint"):
+            print(f"  unmounting {dev['path']} ({dev['mountpoint']})")
+            _umount_path(dev["path"])
+        for child in dev.get("children") or []:
+            walk(child)
+    for d in json.loads(out).get("blockdevices", []):
+        walk(d)
+
+
+def unmount_if_mounted(part: str) -> None:
+    """Unmount a single partition if a desktop auto-mounted it."""
+    mp = subprocess.run(["lsblk", "-no", "MOUNTPOINT", part],
+                        capture_output=True, text=True).stdout.strip()
+    if mp:
+        print(f"  unmounting {part} ({mp})")
+        _umount_path(part)
+
+
 def partition(target: str, hfs_label: str) -> tuple[str, str]:
     """Wipe target, write GPT (ESP + Apple HFS+). Return (esp_part, hfs_part)."""
+    unmount_disk(target)   # desktop may have auto-mounted its partitions
     _run(["sudo", "wipefs", "-a", target])
     _run(["sudo", "sgdisk", "-Z", target])
     _run(["sudo", "sgdisk", "-n", "1:0:+200M", "-t", f"1:{ESP_TYPE}",
@@ -126,6 +156,7 @@ def copy_installer(hfs_part: str, app_dir: Path, work: Path,
     the app (the pkg path — see docs: not yet boot-verified end to end).
     """
     dst = work / "dst_rw"
+    unmount_if_mounted(hfs_part)   # udisks may auto-mount the freshly formatted volume
     _mount(hfs_part, dst, ro=False)
     try:
         print(f"  copying {app_dir.name} (this is the slow part)")
@@ -179,6 +210,7 @@ def build_intel(target: str, app_dir: Path, work: Path, hfs_label: str) -> None:
     # Attempt the Intel-specific bless: point finderInfo at a boot.efi if present.
     folder_cnid = file_cnid = None
     dst = work / "dst_rw"
+    unmount_if_mounted(hfs)
     _mount(hfs, dst, ro=False)
     try:
         boot_efi = next(dst.rglob("boot.efi"), None)
