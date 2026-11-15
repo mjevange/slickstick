@@ -33,27 +33,26 @@ target USB.
 
 ## Quick start
 
-No manual download — install the `slickstick` command with one line:
+**Run it once — nothing installed.** Fetches to a temp dir, runs the wizard,
+cleans up after itself:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/mjevange/slickstick/main/run.sh)
+```
+
+<sub>Homebrew-style form works too: <code>bash -c "$(curl -fsSL https://raw.githubusercontent.com/mjevange/slickstick/main/run.sh)"</code></sub>
+
+**Or install a reusable `slickstick` command** (clones to
+`~/.local/share/slickstick`, launcher in `~/.local/bin`):
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/mjevange/slickstick/main/install.sh)
-```
-
-Then launch the guided wizard:
-
-```bash
 slickstick
 ```
 
-Or install **and** run the wizard in one go:
-
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/mjevange/slickstick/main/install.sh) --run
-```
-
-The installer clones into `~/.local/share/slickstick` and drops a `slickstick`
-launcher in `~/.local/bin`. (Use `bash <(curl …)`, not `curl … | bash`, so the
-wizard can read your keyboard.)
+Prefer `bash <(curl …)` over `curl … | bash` — but the bootstraps also read
+your terminal directly (`/dev/tty`), so the wizard's prompts work either way.
+The one-line pattern follows Homebrew, rustup, and Oh My Zsh.
 
 ## Requirements
 
