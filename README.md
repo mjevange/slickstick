@@ -49,30 +49,35 @@ anything is missing.
 
 ## Usage
 
+Just run it — the guided **wizard** walks you through everything:
+
 ```bash
-# 1. see what USB disks are plugged in
-python3 slickstick.py devices
-
-# 2. build — downloads via gibMacOS (pick the version in its menu),
-#    then prompts you to choose the target disk and confirm the wipe
-sudo python3 slickstick.py build
-
-# target a specific disk, skip the menu
-sudo python3 slickstick.py build --device /dev/sdb
-
-# use files you already have (an Install app, a .pkg, or a mounted stick)
-sudo python3 slickstick.py build --local "/path/to/Install macOS 27 Golden Gate.app"
-
-# download a direct InstallAssistant.pkg URL from Apple's CDN
-sudo python3 slickstick.py build --url "https://updates.cdn-apple.com/.../InstallAssistant.pkg"
-
-# copy the *real* root markers from a known-good stick (most faithful build)
-sudo python3 slickstick.py build --reference-stick /dev/sdc
+sudo python3 slickstick.py
 ```
 
-The build **detects inserted USB media, lists it, has you pick the target, shows
-its details, and makes you type the device name to confirm** before erasing
-anything (use `-y` to skip the prompt in scripts).
+It checks your dependencies, asks where to get macOS, asks the target
+architecture, then **detects your inserted USB, lists it, has you pick it, and
+makes you type the device name to confirm** before erasing anything. No flags to
+memorize.
+
+<details>
+<summary><b>Advanced / scripting</b> (flag-driven, non-interactive)</summary>
+
+```bash
+python3 slickstick.py devices          # list USB disks
+python3 slickstick.py deps             # check required tools
+
+# build to a specific disk without prompts
+sudo python3 slickstick.py build --device /dev/sdb -y
+
+# choose the macOS source explicitly
+sudo python3 slickstick.py build -d /dev/sdb --local "/path/to/Install macOS ….app"
+sudo python3 slickstick.py build -d /dev/sdb --url "https://.../InstallAssistant.pkg"
+
+# copy the *real* root markers from a known-good stick (most faithful build)
+sudo python3 slickstick.py build -d /dev/sdb --reference-stick /dev/sdc
+```
+</details>
 
 ## macOS sources
 
