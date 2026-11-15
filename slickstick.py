@@ -131,6 +131,13 @@ def _execute_build(target: str, source, arch: str, reference_stick: str | None,
         return 1
     print(f"Installer app: {app}")
 
+    # Name the volume after the installer (e.g. "Install macOS 27 Golden Gate")
+    # unless the user set an explicit label. Matches what createinstallmedia does
+    # and reads correctly in the Mac's startup picker.
+    if label == DEFAULT_LABEL and app.name.endswith(".app"):
+        label = app.name[: -len(".app")]
+        print(f"Volume label: {label}")
+
     # Marker provenance: an explicit --reference-stick wins; otherwise a source
     # that cloned a real stick (StickSource) exposes marker_root; otherwise the
     # markers are synthesized inside the build.
