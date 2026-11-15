@@ -91,6 +91,60 @@ content-faithful copy of the installer → `fsck`. No bless, no CNID patching on
 Apple Silicon. The full write-up, including how the "zero bless" was discovered
 and why Intel is harder, is in **[docs/how-it-works.md](docs/how-it-works.md)**.
 
+## The story — why this "couldn't" be done, and how we proved it could
+
+### Why it looked impossible
+
+Every sign said *you need a Mac*:
+
+- `createinstallmedia`, the only official way to build the media, **runs only on
+  macOS**.
+- Apple Silicon has a **signed, sealed boot chain** specifically designed to
+  reject boot media assembled from parts.
+- Conventional wisdom treated the HFS+ **"bless"** as a required, Mac-only step —
+  and Linux can't even reliably *write* journaled HFS+.
+- The installer's boot objects are **Apple-signed**; you can't forge them.
+
+### The hypothesis
+
+The crack in the wall: **booting and building are different problems.** A plain
+`dd` clone of a working stick boots fine from Linux — which means the bytes
+aren't secret. `createinstallmedia` contributes *procedure*, not magic material.
+So if cloning works, maybe the "hard part" is just **arranging Apple's own
+already-signed files**, not forging anything.
+
+We chased some dead ends to get there — an "empty blessed skeleton" you could
+reuse (impossible: a bless points *at* content, so there's nothing to pre-bake),
+and swapping files into a blessed shell (exactly what the sealed chain blocks).
+The move that worked: stop treating a known-good stick as a *donor* and use it as
+an **oracle** — build a candidate, then *diff* against the real thing.
+
+### What we tested
+
+Reading a real installer stick overturned the core assumption:
+
+- Its HFS+ **`finderInfo` was all zero** — *no bless at all.* (That one `dd` read
+  also retired the bless-patching code we'd written, unused.)
+- Its **EFI partition was empty**, and the HFS+ partition was a **plain Apple
+  type** with no special flags.
+
+No boot markers anywhere → **Apple Silicon recognizes the installer by its
+content, not by metadata.** So we built a candidate entirely on Linux — GPT +
+**non-journaled** HFS+ (chosen for clean writes, to isolate the one variable) +
+a faithful content copy — then diffed it against the real stick: **identical file
+tree (895/895 files, 20 symlinks, 0 hard links), `fsck`-clean.**
+
+### The proof
+
+The Linux-built stick, plugged into an M1, **appeared in the startup picker and
+booted into the macOS installer's Recovery Assistant** — the same behavior as a
+`createinstallmedia` stick. Theory proven: a bootable Apple Silicon installer,
+built with no Mac in the loop.
+
+*Honest scope:* proven to **boot to the installer**. A full install to
+completion, the pkg-sourced (synthesized-marker) path, and Intel are still open —
+see the [Status](#status--read-this) table.
+
 ## Safety
 
 - Refuses targets that are internal disks or carry a mounted `/`, `/boot`, `/home`.
