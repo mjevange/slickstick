@@ -85,10 +85,20 @@ def _run(cmd: list[str]) -> None:
     subprocess.run(cmd, check=True)
 
 
-def _umount_path(path: str) -> None:
-    """Best-effort unmount: plain, then lazy. Desktop (udisks) auto-mounts often."""
-    if subprocess.run(["sudo", "umount", path]).returncode != 0:
-        subprocess.run(["sudo", "umount", "-l", path])
+def _umount_path(part: str) -> None:
+    """Unmount a partition, cooperating with the desktop auto-mounter.
+
+    Prefer `udisksctl unmount`: it asks the same service that auto-mounted the
+    device to release it, so it won't immediately re-mount, and needs no sudo for
+    the user's own mounts. Fall back to umount (then lazy umount) if that fails
+    or udisks isn't present.
+    """
+    if shutil.which("udisksctl"):
+        if subprocess.run(["udisksctl", "unmount", "-b", part],
+                          capture_output=True).returncode == 0:
+            return
+    if subprocess.run(["sudo", "umount", part]).returncode != 0:
+        subprocess.run(["sudo", "umount", "-l", part])
 
 
 def unmount_disk(disk: str) -> None:
