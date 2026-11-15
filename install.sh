@@ -51,6 +51,8 @@ fi
 
 if [ "${1:-}" = "--run" ]; then
   echo
+  # Read from the terminal so prompts work even under `curl ... | bash`.
+  { : < /dev/tty; } 2>/dev/null && exec python3 "$DEST/slickstick.py" < /dev/tty
   exec python3 "$DEST/slickstick.py"
 fi
 
