@@ -37,22 +37,28 @@ target USB.
 cleans up after itself:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/mjevange/slickstick/main/run.sh)
+curl -fsSL https://raw.githubusercontent.com/mjevange/slickstick/main/run.sh | bash
 ```
-
-<sub>Homebrew-style form works too: <code>bash -c "$(curl -fsSL https://raw.githubusercontent.com/mjevange/slickstick/main/run.sh)"</code></sub>
 
 **Or install a reusable `slickstick` command** (clones to
 `~/.local/share/slickstick`, launcher in `~/.local/bin`):
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/mjevange/slickstick/main/install.sh)
-slickstick
+curl -fsSL https://raw.githubusercontent.com/mjevange/slickstick/main/install.sh | bash
 ```
 
-Prefer `bash <(curl …)` over `curl … | bash` — but the bootstraps also read
-your terminal directly (`/dev/tty`), so the wizard's prompts work either way.
-The one-line pattern follows Homebrew, rustup, and Oh My Zsh.
+Works in **any shell** — bash, zsh, **fish**. The bootstraps read your terminal
+directly (`/dev/tty`), so the wizard stays interactive even through the pipe. To
+pass arguments, append `-s --`, e.g. `… | bash -s -- devices`.
+
+<details>
+<summary>Prefer process substitution? (bash/zsh or fish)</summary>
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/mjevange/slickstick/main/run.sh)       # bash / zsh
+bash (curl -fsSL https://raw.githubusercontent.com/mjevange/slickstick/main/run.sh | psub) # fish
+```
+</details>
 
 ## Requirements
 
