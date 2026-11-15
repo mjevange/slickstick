@@ -11,6 +11,7 @@ See docs/how-it-works.md.
 from __future__ import annotations
 
 import argparse
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -117,8 +118,25 @@ def _execute_build(target: str, source, arch: str, reference_stick: str | None,
     except usb.BuildError as e:
         print(f"SAFETY: {e}")
         return 1
+
+    work = Path(workdir) if workdir else Path(tempfile.mkdtemp(prefix="slickstick-"))
+    work.mkdir(parents=True, exist_ok=True)
+
+    # Disk-space preflight for download/extract sources — before we wipe anything.
+    need = source.space_needed()
+    if need:
+        free = shutil.disk_usage(work).free
+        if free < need:
+            ui.err(f"Not enough free space for the '{source.id}' source.")
+            print(f"  Need ~{ui.human(need)} in {work}, but only {ui.human(free)} is free.")
+            print("  Free up space, or pass --workdir pointing at a larger disk.")
+            source.cleanup()
+            return 1
+        ui.info(f"space check: {ui.human(free)} free, ~{ui.human(need)} needed — OK")
+
     if not _confirm_wipe(target, yes):
         print("Cancelled.")
+        source.cleanup()
         return 1
 
     # Authenticate sudo once, up front — fail cleanly here rather than mid-wipe.
@@ -126,10 +144,9 @@ def _execute_build(target: str, source, arch: str, reference_stick: str | None,
         usb.ensure_sudo()
     except usb.BuildError as e:
         print(f"\n{e}")
+        source.cleanup()
         return 1
 
-    work = Path(workdir) if workdir else Path(tempfile.mkdtemp(prefix="slickstick-"))
-    work.mkdir(parents=True, exist_ok=True)
     print(f"\nSource: {source.id} — {source.desc}")
     try:
         app = source.obtain(work)
