@@ -137,11 +137,22 @@ def _used_bytes(mount_point: str) -> int:
         return 0
 
 
-def run_with_progress(command: list[str], mount_point: str, total_bytes: int,
-                      label: str = "copy") -> int:
-    """Run a command that writes into mount_point, showing a live progress bar
-    driven by the destination's growing used-space. Returns the exit code."""
+def measure_mount(mount_point: str):
+    """Progress callback: bytes written into a mount since now (growing used-space)."""
     base = _used_bytes(mount_point)
+    return lambda: max(0, _used_bytes(mount_point) - base)
+
+
+def measure_file(path: str):
+    """Progress callback: current size of a single output file."""
+    return lambda: os.path.getsize(path) if os.path.exists(path) else 0
+
+
+def run_with_progress(command: list[str], total_bytes: int, measure,
+                      label: str = "copy") -> int:
+    """Run a command, showing a live progress bar. `measure` is a callable
+    returning bytes-done so far (see measure_mount / measure_file). Returns the
+    command's exit code."""
     start = time.time()
     proc = subprocess.Popen(command)
 
@@ -162,7 +173,7 @@ def run_with_progress(command: list[str], mount_point: str, total_bytes: int,
 
     last_line = 0.0
     while proc.poll() is None:
-        copied = max(0, _used_bytes(mount_point) - base)
+        copied = measure()
         now = time.time()
         if _TTY or now - last_line >= 10:
             render(copied)
@@ -170,7 +181,7 @@ def run_with_progress(command: list[str], mount_point: str, total_bytes: int,
         time.sleep(0.5)
 
     rc = proc.wait()
-    render(max(0, _used_bytes(mount_point) - base), done=True)
+    render(measure(), done=True)
     if _TTY:
         print()
     return rc
