@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Downloaded macOS payloads — never commit Apple files
+*.ipsw
+*.pkg
+*.dmg
+InstallAssistant*
+Install macOS*/
+gibMacOS/
+downloads/
+work/
+cache/
+
+# Scratch / build artifacts
+*.img
+*.log
+.DS_Store
