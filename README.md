@@ -25,7 +25,7 @@ content copy over Linux's own `hfsplus` driver is enough. See
 | Path | State |
 |------|-------|
 | **Apple Silicon**, cloned from an installer stick (`--stick`) | ✅ **Proven** — boots to the installer |
-| **Apple Silicon**, from a pkg (synthesized markers) | 🧪 Builds; root markers synthesized, **not yet boot-verified end to end** |
+| **Apple Silicon**, from a pkg (synthesized markers) | ✅ **Proven** — boots to the installer |
 | **Intel** | 🧪 **Experimental & unverified** — different boot path (EFI + real bless); no Intel Mac has tested it |
 
 This is a tool for making install media for **Macs you own**. It erases the
@@ -132,11 +132,11 @@ New backends slot into `lib/sources/` behind a small interface.
 A `createinstallmedia` stick carries small root files (`.IAPhysicalMedia`,
 `restore/`, `.VolumeIcon.icns`) that the pkg doesn't:
 
-- **stick source** → copies the **real** markers (the only boot-verified path).
-- **any other source** → **synthesizes** them from the app (builds fine, not yet
-  boot-verified end to end — see [Status](#status--read-this)).
+- **stick source** → copies the **real** markers verbatim.
+- **any other source** → **synthesizes** them from the app's version info.
+  Boot-verified on hardware, so this is a first-class path, not a fallback.
 - **`--reference-stick /dev/sdX`** → advanced escape hatch to copy real markers
-  onto an app that came from a non-stick source. Usually unnecessary.
+  onto an app that came from a non-stick source. Rarely needed.
 
 ## How it works
 
@@ -195,9 +195,9 @@ booted into the macOS installer's Recovery Assistant** — the same behavior as 
 `createinstallmedia` stick. Theory proven: a bootable Apple Silicon installer,
 built with no Mac in the loop.
 
-*Honest scope:* proven to **boot to the installer**. A full install to
-completion, the pkg-sourced (synthesized-marker) path, and Intel are still open —
-see the [Status](#status--read-this) table.
+*Scope:* both the stick-clone and pkg (synthesized-marker) paths are proven to
+**boot to the installer** on real hardware. A full install to completion and
+Intel are still open — see the [Status](#status--read-this) table.
 
 ## Safety
 
