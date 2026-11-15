@@ -120,6 +120,13 @@ def _execute_build(target: str, source, arch: str, reference_stick: str | None,
         print("Cancelled.")
         return 1
 
+    # Authenticate sudo once, up front — fail cleanly here rather than mid-wipe.
+    try:
+        usb.ensure_sudo()
+    except usb.BuildError as e:
+        print(f"\n{e}")
+        return 1
+
     work = Path(workdir) if workdir else Path(tempfile.mkdtemp(prefix="slickstick-"))
     work.mkdir(parents=True, exist_ok=True)
     print(f"\nSource: {source.id} — {source.desc}")
@@ -150,11 +157,12 @@ def _execute_build(target: str, source, arch: str, reference_stick: str | None,
         reference_root = source.marker_root
 
     try:
-        if arch == "intel":
-            usb.build_intel(target, app, work, label)
-        else:
-            usb.build(target, app, work, label,
-                      journaled=journaled, reference_root=reference_root)
+        with usb.SudoKeepAlive():
+            if arch == "intel":
+                usb.build_intel(target, app, work, label)
+            else:
+                usb.build(target, app, work, label,
+                          journaled=journaled, reference_root=reference_root)
     except usb.BuildError as e:
         print(f"Build failed: {e}")
         return 1

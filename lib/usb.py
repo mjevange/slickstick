@@ -8,8 +8,10 @@ on the installer content, not volume metadata.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
+import threading
 from pathlib import Path
 
 from . import payload
@@ -80,6 +82,45 @@ def _mountpoint(part: str) -> str:
 # --------------------------------------------------------------------------- #
 # Build
 # --------------------------------------------------------------------------- #
+def ensure_sudo() -> None:
+    """Authenticate sudo once, up front, before anything touches the disk.
+
+    Fails cleanly (BuildError) if the user can't sudo, instead of blowing up
+    halfway through with a traceback. No-op when already root.
+    """
+    if os.geteuid() == 0:
+        return
+    if shutil.which("sudo") is None:
+        raise BuildError("This build needs root to partition the USB, but 'sudo' "
+                         "isn't installed. Run as root, or install sudo.")
+    print("\nSlickStick needs administrator access (sudo) to partition and format the USB.")
+    if subprocess.run(["sudo", "-v"]).returncode != 0:
+        raise BuildError("sudo authentication failed — make sure your user may run sudo.")
+
+
+class SudoKeepAlive:
+    """Keep sudo's timestamp fresh during a long build so it won't re-prompt
+    mid-copy. Use as a context manager around the build."""
+
+    def __init__(self, interval: int = 60):
+        self._interval = interval
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def __enter__(self) -> "SudoKeepAlive":
+        if os.geteuid() != 0 and shutil.which("sudo"):
+            self._thread = threading.Thread(target=self._loop, daemon=True)
+            self._thread.start()
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self._stop.set()
+
+    def _loop(self) -> None:
+        while not self._stop.wait(self._interval):
+            subprocess.run(["sudo", "-n", "-v"], capture_output=True)
+
+
 def _run(cmd: list[str]) -> None:
     print("  $ " + " ".join(cmd))
     subprocess.run(cmd, check=True)
