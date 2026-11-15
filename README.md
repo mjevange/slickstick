@@ -24,8 +24,8 @@ content copy over Linux's own `hfsplus` driver is enough. See
 
 | Path | State |
 |------|-------|
-| **Apple Silicon**, files from a reference stick | ✅ **Proven** — boots to the installer |
-| **Apple Silicon**, files from a pkg (synthesized markers) | 🧪 Builds; root markers synthesized, **not yet boot-verified end to end** |
+| **Apple Silicon**, cloned from an installer stick (`--stick`) | ✅ **Proven** — boots to the installer |
+| **Apple Silicon**, from a pkg (synthesized markers) | 🧪 Builds; root markers synthesized, **not yet boot-verified end to end** |
 | **Intel** | 🧪 **Experimental & unverified** — different boot path (EFI + real bless); no Intel Mac has tested it |
 
 This is a tool for making install media for **Macs you own**. It erases the
@@ -107,8 +107,8 @@ slickstick build --device /dev/sdb -y
 slickstick build -d /dev/sdb --local "/path/to/Install macOS ….app"
 slickstick build -d /dev/sdb --url "https://.../InstallAssistant.pkg"
 
-# copy the *real* root markers from a known-good stick (most faithful build)
-slickstick build -d /dev/sdb --reference-stick /dev/sdc
+# clone an inserted installer stick (real markers — the proven path)
+slickstick build -d /dev/sdb --stick /dev/sdc2
 ```
 </details>
 
@@ -117,10 +117,22 @@ slickstick build -d /dev/sdb --reference-stick /dev/sdc
 | Source | Flag | What it does |
 |--------|------|--------------|
 | **gibMacOS** (default) | — | Downloads a full installer from Apple via [corpnewt/gibMacOS](https://github.com/corpnewt/gibMacOS); pick the version in its menu |
-| **local** | `--local PATH` | Use an existing Install app, a downloaded `.pkg`, or a mounted stick |
+| **stick** | `--stick /dev/sdX2` | **Clone an inserted installer stick** — the wizard detects and lists them. Copies the app *and the real root markers*, so it's the boot-verified path |
+| **local** | `--local PATH` | Use an existing Install app or a downloaded `.pkg` |
 | **url** | `--url URL` | Download a direct `InstallAssistant.pkg` URL from Apple's CDN |
 
 New backends slot into `lib/sources/` behind a small interface.
+
+### Root markers — three tiers
+
+A `createinstallmedia` stick carries small root files (`.IAPhysicalMedia`,
+`restore/`, `.VolumeIcon.icns`) that the pkg doesn't:
+
+- **stick source** → copies the **real** markers (the only boot-verified path).
+- **any other source** → **synthesizes** them from the app (builds fine, not yet
+  boot-verified end to end — see [Status](#status--read-this)).
+- **`--reference-stick /dev/sdX`** → advanced escape hatch to copy real markers
+  onto an app that came from a non-stick source. Usually unnecessary.
 
 ## How it works
 

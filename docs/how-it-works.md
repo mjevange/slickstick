@@ -62,15 +62,20 @@ incidental. `--journaled` is available if you want to match the original exactly
 
 A `createinstallmedia` stick carries root files the pkg does not: `.IAPhysicalMedia`
 (a small plist naming the app, version, and build), an empty `restore/`, and a
-volume icon. SlickStick handles these two ways:
+volume icon. SlickStick handles these in three tiers:
 
-- **`--reference-stick`** copies the real markers from a known-good stick. This
-  is the proven path.
-- Otherwise it **synthesizes** `.IAPhysicalMedia` from the app's own version info
-  and creates an empty `restore/`. This path builds cleanly but has **not** been
-  boot-verified end to end — the authoritative version/build lives in
-  `SharedSupport`, which we don't mount, so the synthesized marker may be
-  approximate.
+- **stick source** (`--stick`) — clones a real installer stick, copying its
+  markers verbatim. This is the only boot-verified path, so the wizard offers it
+  as a first-class source that auto-detects inserted installer sticks.
+- **synthesized** (any other source) — `.IAPhysicalMedia` is generated from the
+  app's version info and an empty `restore/` is created. Builds cleanly but is
+  **not** boot-verified end to end: the authoritative point-version/build lives
+  in `SharedSupport` (which we don't mount), so the synthesized marker may be
+  approximate. Capturing the exact build from the pkg/catalog during download
+  would close this gap and remove the last reason to want a real stick.
+- **`--reference-stick`** — advanced escape hatch: copy real markers onto an app
+  that came from a non-stick source. Rarely needed now that the stick source
+  exists.
 
 ## The reverse-engineering method (the "oracle")
 
