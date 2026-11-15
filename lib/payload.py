@@ -14,9 +14,10 @@ boot-verified end to end).
 """
 from __future__ import annotations
 
+import os
 import plistlib
-import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 
@@ -78,25 +79,27 @@ def app_version_info(app: Path) -> dict[str, str]:
     return info
 
 
+# The destination volume is mounted by root, so all writes to it go through sudo
+# (same as the installer-app copy) — a plain Python write would be EACCES.
 def write_markers_from_app(app_on_volume: Path, volume_root: Path) -> None:
-    """Synthesize the root markers for a pkg-sourced build."""
+    """Synthesize the root markers for a pkg-sourced build (written as root)."""
     info = app_version_info(app_on_volume)
-    marker = volume_root / ".IAPhysicalMedia"
-    with open(marker, "wb") as fh:
-        plistlib.dump(info, fh)
-    (volume_root / "restore").mkdir(exist_ok=True)
+    fd, tmp = tempfile.mkstemp(suffix=".IAPhysicalMedia")
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            plistlib.dump(info, fh)
+        subprocess.run(["sudo", "cp", tmp, str(volume_root / ".IAPhysicalMedia")], check=True)
+    finally:
+        os.unlink(tmp)
+    subprocess.run(["sudo", "mkdir", "-p", str(volume_root / "restore")], check=True)
 
 
 def copy_markers_from_stick(src_root: Path, volume_root: Path) -> list[str]:
-    """Copy the real root markers from a reference createinstallmedia stick."""
+    """Copy the real root markers from a createinstallmedia stick (written as root)."""
     copied = []
     for name in (".IAPhysicalMedia", ".VolumeIcon.icns", "restore"):
         src = src_root / name
         if src.exists():
-            dst = volume_root / name
-            if src.is_dir():
-                shutil.copytree(src, dst, dirs_exist_ok=True)
-            else:
-                shutil.copy2(src, dst)
+            subprocess.run(["sudo", "cp", "-a", str(src), str(volume_root) + "/"], check=True)
             copied.append(name)
     return copied
