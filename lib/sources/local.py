@@ -15,7 +15,7 @@ from .. import payload
 
 class LocalSource(Source):
     id = "local"
-    desc = "use an existing Install app, a downloaded pkg, or a mounted stick"
+    desc = "use an existing Install app or a downloaded .pkg"
 
     def __init__(self, path: str):
         self.path = Path(path).expanduser()

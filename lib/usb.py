@@ -38,6 +38,13 @@ def list_removable_disks() -> list[dict]:
     return disks
 
 
+def parent_disk(part: str) -> str:
+    """'/dev/sdc2' -> '/dev/sdc' (whole disk) via lsblk PKNAME."""
+    out = subprocess.run(["lsblk", "-no", "pkname", part],
+                         capture_output=True, text=True).stdout.strip().splitlines()
+    return f"/dev/{out[0]}" if out and out[0] else part
+
+
 def assert_safe_target(target: str, source_disk: str | None = None) -> None:
     """Refuse obviously dangerous targets. Raises BuildError if unsafe."""
     name = Path(target).name
