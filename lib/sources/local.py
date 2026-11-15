@@ -20,6 +20,10 @@ class LocalSource(Source):
     def __init__(self, path: str):
         self.path = Path(path).expanduser()
 
+    def space_needed(self) -> int:
+        # A .pkg must be extracted (~17 GB app); an existing app is used in place.
+        return 18 * 1024 ** 3 if self.path.suffix == ".pkg" else 0
+
     def obtain(self, workdir: Path, version: str | None = None) -> Path:
         p = self.path
         if not p.exists():

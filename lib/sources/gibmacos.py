@@ -27,6 +27,9 @@ class GibMacOSSource(Source):
     def __init__(self, clone_dir: Path | None = None):
         self.clone_dir = clone_dir
 
+    def space_needed(self) -> int:
+        return 33 * 1024 ** 3   # ~14 GB pkg download + ~17 GB extracted app + slack
+
     def obtain(self, workdir: Path, version: str | None = None) -> Path:
         gib = self._ensure_clone(workdir)
         dl_root = gib / "macOS Downloads"

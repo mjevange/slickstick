@@ -33,6 +33,11 @@ class Source(abc.ABC):
     def cleanup(self) -> None:
         """Release any resources (e.g. unmount) after the build. No-op default."""
 
+    def space_needed(self) -> int:
+        """Estimated free bytes required in the work dir. 0 for sources that
+        stream straight to the target (stick, an existing app)."""
+        return 0
+
     def list_versions(self) -> list[str]:  # optional
         """Return selectable version strings, if the backend supports it."""
         return []

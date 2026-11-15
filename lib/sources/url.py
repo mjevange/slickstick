@@ -20,6 +20,9 @@ class UrlSource(Source):
     def __init__(self, url: str):
         self.url = url
 
+    def space_needed(self) -> int:
+        return 33 * 1024 ** 3   # ~14 GB pkg download + ~17 GB extracted app + slack
+
     def obtain(self, workdir: Path, version: str | None = None) -> Path:
         if not self.url.lower().endswith(".pkg"):
             raise ValueError("--url must point at an InstallAssistant.pkg")
