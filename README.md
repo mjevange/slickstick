@@ -31,6 +31,30 @@ content copy over Linux's own `hfsplus` driver is enough. See
 This is a tool for making install media for **Macs you own**. It erases the
 target USB.
 
+## Quick start
+
+No manual download — install the `slickstick` command with one line:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/mjevange/slickstick/main/install.sh)
+```
+
+Then launch the guided wizard:
+
+```bash
+slickstick
+```
+
+Or install **and** run the wizard in one go:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/mjevange/slickstick/main/install.sh) --run
+```
+
+The installer clones into `~/.local/share/slickstick` and drops a `slickstick`
+launcher in `~/.local/bin`. (Use `bash <(curl …)`, not `curl … | bash`, so the
+wizard can read your keyboard.)
+
 ## Requirements
 
 - Linux with the **`hfsplus` kernel module** (built in or loadable)
@@ -41,7 +65,7 @@ target USB.
 Check everything at once:
 
 ```bash
-python3 slickstick.py deps
+slickstick deps
 ```
 
 It prints the exact install command for your distro (Arch / Debian / Fedora) if
@@ -52,30 +76,34 @@ anything is missing.
 Just run it — the guided **wizard** walks you through everything:
 
 ```bash
-sudo python3 slickstick.py
+slickstick
 ```
 
 It checks your dependencies, asks where to get macOS, asks the target
 architecture, then **detects your inserted USB, lists it, has you pick it, and
-makes you type the device name to confirm** before erasing anything. No flags to
-memorize.
+makes you type the device name to confirm** before erasing anything. Run it as
+your **normal user** — it uses `sudo` only for the privileged partition/format
+steps and prompts for your password then. No flags to memorize.
+
+> Running from a git clone instead of the installer? Use `python3 slickstick.py`
+> everywhere you see `slickstick` below.
 
 <details>
 <summary><b>Advanced / scripting</b> (flag-driven, non-interactive)</summary>
 
 ```bash
-python3 slickstick.py devices          # list USB disks
-python3 slickstick.py deps             # check required tools
+slickstick devices          # list USB disks
+slickstick deps             # check required tools
 
 # build to a specific disk without prompts
-sudo python3 slickstick.py build --device /dev/sdb -y
+slickstick build --device /dev/sdb -y
 
 # choose the macOS source explicitly
-sudo python3 slickstick.py build -d /dev/sdb --local "/path/to/Install macOS ….app"
-sudo python3 slickstick.py build -d /dev/sdb --url "https://.../InstallAssistant.pkg"
+slickstick build -d /dev/sdb --local "/path/to/Install macOS ….app"
+slickstick build -d /dev/sdb --url "https://.../InstallAssistant.pkg"
 
 # copy the *real* root markers from a known-good stick (most faithful build)
-sudo python3 slickstick.py build -d /dev/sdb --reference-stick /dev/sdc
+slickstick build -d /dev/sdb --reference-stick /dev/sdc
 ```
 </details>
 
