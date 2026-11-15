@@ -215,7 +215,7 @@ def copy_installer(hfs_part: str, app_dir: Path, work: Path,
         ui.info(f"copying {app_dir.name} — {ui.human(total)}")
         rc = ui.run_with_progress(
             ["sudo", "cp", "-a", str(app_dir), str(dst) + "/"],
-            str(dst), total, label="copy",
+            total, ui.measure_mount(str(dst)), label="copy",
         )
         if rc != 0:
             raise BuildError("copying the installer app failed")
@@ -237,9 +237,80 @@ def verify(hfs_part: str) -> bool:
     return rc == 0
 
 
+def _find_app_on(root: Path) -> Path:
+    out = subprocess.run(["sudo", "find", str(root), "-maxdepth", "1", "-iname", "Install macOS *.app"],
+                         capture_output=True, text=True).stdout.strip().splitlines()
+    if not out:
+        raise BuildError("no 'Install macOS *.app' on target after streaming")
+    return Path(out[0])
+
+
+def stream_app_to_target(pkg: Path, dst: Path, repo_root: Path) -> Path:
+    """Stream the app from a pkg straight onto the mounted target `dst`.
+
+    Reads the pkg as the normal user (NFS-safe, no root-squash); only the writes
+    to the root-mounted target go through sudo. The skeleton comes via the pbzx
+    pipe; the big SharedSupport.dmg streams directly with a progress bar.
+    """
+    # 1. app skeleton -> target root (strip ./Applications/)
+    p1 = subprocess.Popen(["bsdtar", "-xO", "-f", str(pkg), "Payload"], stdout=subprocess.PIPE)
+    p2 = subprocess.Popen([sys.executable, "-m", "lib.pbzx"],
+                          stdin=p1.stdout, stdout=subprocess.PIPE, cwd=str(repo_root))
+    p3 = subprocess.Popen(["sudo", "bsdtar", "-x", "--strip-components", "2", "-C", str(dst)],
+                          stdin=p2.stdout)
+    p1.stdout.close()
+    p2.stdout.close()
+    p3.communicate()
+    p1.wait()
+    p2.wait()
+    if p1.returncode or p2.returncode or p3.returncode:
+        raise BuildError("streaming the app skeleton failed")
+
+    app = _find_app_on(dst)
+    shared = app / "Contents" / "SharedSupport"
+    subprocess.run(["sudo", "mkdir", "-p", str(shared)], check=True)
+
+    # 2. SharedSupport.dmg -> target, with progress (user reads pkg, root writes)
+    dmg = shared / "SharedSupport.dmg"
+    size = payload.member_size(pkg, "SharedSupport.dmg")
+    cmd = ["bash", "-c",
+           f"bsdtar -xO -f {shlex.quote(str(pkg))} SharedSupport.dmg "
+           f"| sudo tee {shlex.quote(str(dmg))} >/dev/null"]
+    rc = ui.run_with_progress(cmd, size, ui.measure_mount(str(dst)), label="dmg")
+    if rc:
+        raise BuildError("streaming SharedSupport.dmg failed")
+    return app
+
+
+def build_streaming(target: str, pkg: Path, work: Path, hfs_label: str) -> None:
+    """Write-only strategy: partition, then stream the app straight onto the USB
+    with ~0 scratch space. Markers are synthesized from the streamed app."""
+    repo_root = Path(__file__).resolve().parent.parent
+    ui.step(1, 4, "Partitioning (GPT: ESP + Apple HFS+)")
+    esp, hfs = partition(target, hfs_label)
+    ui.step(2, 4, "Formatting (empty ESP + HFS+)")
+    format_parts(esp, hfs, hfs_label)
+    ui.step(3, 4, "Streaming installer onto the USB (no scratch space)")
+    dst = work / "dst_rw"
+    unmount_if_mounted(hfs)
+    _mount(hfs, dst, ro=False)
+    try:
+        app = stream_app_to_target(pkg, dst, repo_root)
+        payload.write_markers_from_app(app, dst)
+        ui.ok("synthesized root markers (.IAPhysicalMedia, restore/)")
+        subprocess.run(["sudo", "sync"])
+    finally:
+        _umount(dst)
+    ui.step(4, 4, "Verifying")
+    if verify(hfs):
+        ui.ok("Volume verified.")
+    else:
+        ui.warn("fsck reported issues — inspect before use.")
+
+
 def build(target: str, app_dir: Path, work: Path, hfs_label: str,
           journaled: bool = False, reference_root: Path | None = None) -> None:
-    """Full Apple Silicon build pipeline."""
+    """Full Apple Silicon build pipeline (copy an already-unpacked app)."""
     ui.step(1, 4, "Partitioning (GPT: ESP + Apple HFS+)")
     esp, hfs = partition(target, hfs_label)
     ui.step(2, 4, "Formatting (empty ESP + HFS+)")
