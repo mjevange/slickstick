@@ -21,9 +21,9 @@ class UrlSource(Source):
         self.url = url
 
     def space_needed(self) -> int:
-        # Current two-stage extract materializes pkg (~14) + Payload (~14) +
-        # app (~17). A future streaming extractor would cut this to ~17.
-        return 46 * 1024 ** 3
+        # Downloaded pkg (~17) + extracted app (~18) on disk. A streaming
+        # strategy (write straight to USB) would cut this to near zero.
+        return 36 * 1024 ** 3
 
     def obtain(self, workdir: Path, version: str | None = None) -> Path:
         if not self.url.lower().endswith(".pkg"):

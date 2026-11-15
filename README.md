@@ -66,10 +66,10 @@ bash (curl -fsSL https://raw.githubusercontent.com/mjevange/slickstick/main/run.
 - `gptfdisk` (`sgdisk`), `hfsprogs` (`mkfs.hfsplus`/`fsck.hfsplus`), `libarchive`
   (`bsdtar`), `dosfstools`, `util-linux`, `curl`, `git`, Python 3.10+
 - A USB stick **≥ 16 GB**
-- Free disk for the work dir: **~46 GB** for pkg download+extract (gibMacOS/URL),
-  ~31 GB for a local `.pkg`, and **almost none** for the stick source (it streams
+- Free disk for the work dir: **~36 GB** for pkg download+extract (gibMacOS/URL),
+  ~18 GB for a local `.pkg`, and **almost none** for the stick source (it streams
   straight to the target). SlickStick checks this before wiping anything.
-  (A future streaming extractor would cut the pkg footprint to ~17 GB.)
+  (The planned "write only" strategy streams straight to the USB — near-zero scratch.)
 
 Check everything at once:
 
