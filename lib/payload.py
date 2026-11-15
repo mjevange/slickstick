@@ -16,10 +16,13 @@ from __future__ import annotations
 
 import os
 import plistlib
+import shlex
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+from . import ui
 
 
 def extract_pkg(pkg: Path, dest: Path) -> Path:
@@ -38,8 +41,26 @@ def extract_pkg(pkg: Path, dest: Path) -> Path:
         raise RuntimeError(f"Could not find 'Install macOS *.app' after unpacking {pkg.name}.")
     shared = app / "Contents" / "SharedSupport"
     shared.mkdir(parents=True, exist_ok=True)
-    _extract_member(pkg, "SharedSupport.dmg", shared / "SharedSupport.dmg")
+    dmg = shared / "SharedSupport.dmg"
+    size = member_size(pkg, "SharedSupport.dmg")
+    ui.info(f"extracting SharedSupport.dmg — {ui.human(size)}")
+    cmd = ["bash", "-c",
+           f"bsdtar -xO -f {shlex.quote(str(pkg))} SharedSupport.dmg "
+           f"> {shlex.quote(str(dmg))}"]
+    rc = ui.run_with_progress(cmd, size, ui.measure_file(str(dmg)), label="dmg")
+    if rc:
+        raise RuntimeError(f"extracting SharedSupport.dmg from {pkg.name} failed (rc={rc})")
     return app
+
+
+def member_size(pkg: Path, member: str) -> int:
+    """Uncompressed size of a xar member (from the TOC), or 0 if unknown."""
+    out = subprocess.run(["bsdtar", "-tvf", str(pkg), member],
+                         capture_output=True, text=True).stdout.split()
+    for tok in out:
+        if tok.isdigit() and int(tok) > 1_000_000:
+            return int(tok)
+    return 0
 
 
 def _extract_skeleton(pkg: Path, dest: Path) -> None:
