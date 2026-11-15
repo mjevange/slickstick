@@ -142,7 +142,7 @@ def _execute_build(target: str, source, arch: str, reference_stick: str | None,
 
 def cmd_build(args) -> int:
     """Flag-driven build (power users)."""
-    if deps.check(verbose=False):
+    if deps.missing():
         print("Missing dependencies — run: slickstick deps")
         return 1
     target = args.device or _choose_target()
@@ -156,10 +156,12 @@ def cmd_build(args) -> int:
 def cmd_wizard(args) -> int:
     """Guided, menu-driven build — the default when no subcommand is given."""
     print("SlickStick — build a bootable macOS installer USB, no Mac needed.\n")
-    print("Checking dependencies:")
-    if deps.check(verbose=True):
-        print("\nInstall the missing tools listed above, then run SlickStick again.")
+    if deps.missing():
+        print("Some required tools are missing:\n")
+        deps.check(verbose=True)
+        print("\nInstall the tools listed above, then run SlickStick again.")
         return 1
+    print("Dependencies OK.\n")
 
     print("\nHow should SlickStick get macOS?")
     pick = _menu([

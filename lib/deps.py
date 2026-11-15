@@ -92,10 +92,15 @@ def _modinfo_ok(name: str) -> bool:
         return False
 
 
+def missing() -> list[Tool]:
+    """Return the missing required tools without printing anything."""
+    return [t for t in REQUIRED if shutil.which(t.cmd) is None]
+
+
 def check(verbose: bool = True) -> list[Tool]:
     """Return the list of missing tools (empty == all good)."""
     family = _distro_family()
-    missing = [t for t in REQUIRED if shutil.which(t.cmd) is None]
+    missing_tools = missing()
 
     if verbose:
         for t in REQUIRED:
@@ -107,11 +112,11 @@ def check(verbose: bool = True) -> list[Tool]:
         if not hfs:
             print("       (could not confirm the hfsplus kernel module — the build may fail to mount)")
 
-    if missing:
+    if missing_tools:
         pkgfield = {"arch": "arch", "debian": "debian", "fedora": "fedora"}.get(family)
-        pkgs = [getattr(t, pkgfield) if pkgfield else t.arch for t in missing]
+        pkgs = [getattr(t, pkgfield) if pkgfield else t.arch for t in missing_tools]
         print()
-        print(f"Missing {len(missing)} tool(s). On your system ({family}):")
+        print(f"Missing {len(missing_tools)} tool(s). On your system ({family}):")
         print("  " + _install_cmd(family, pkgs))
 
-    return missing
+    return missing_tools
