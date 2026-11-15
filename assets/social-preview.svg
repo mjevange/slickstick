@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-label="SlickStick">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="0.55" stop-color="#121a33"/>
+      <stop offset="1" stop-color="#1b2550"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#5fb567"/>
+      <stop offset="0.5" stop-color="#4fd1c5"/>
+      <stop offset="1" stop-color="#7db7ff"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="640" fill="url(#bg)"/>
+
+  <!-- faint circuit traces -->
+  <g stroke="#2b3a66" stroke-width="2" fill="none" opacity="0.55">
+    <path d="M60 70 H220 V130 H150"/>
+    <path d="M60 560 H200 V500 H300"/>
+    <path d="M1220 90 H1060 V150 H1130"/>
+    <path d="M1220 570 H1080 V510 H980"/>
+    <circle cx="150" cy="130" r="4" fill="#2b3a66" stroke="none"/>
+    <circle cx="1130" cy="150" r="4" fill="#2b3a66" stroke="none"/>
+    <circle cx="300" cy="500" r="4" fill="#2b3a66" stroke="none"/>
+    <circle cx="980" cy="510" r="4" fill="#2b3a66" stroke="none"/>
+  </g>
+
+  <!-- chip logo mark -->
+  <g transform="translate(590,110)">
+    <rect x="0" y="0" width="100" height="100" rx="16" fill="#101832" stroke="url(#accent)" stroke-width="3.5"/>
+    <rect x="28" y="28" width="44" height="44" rx="7" fill="none" stroke="url(#accent)" stroke-width="3.5"/>
+    <g stroke="url(#accent)" stroke-width="3.5">
+      <line x1="25" y1="-12" x2="25" y2="0"/><line x1="50" y1="-12" x2="50" y2="0"/><line x1="75" y1="-12" x2="75" y2="0"/>
+      <line x1="25" y1="100" x2="25" y2="112"/><line x1="50" y1="100" x2="50" y2="112"/><line x1="75" y1="100" x2="75" y2="112"/>
+      <line x1="-12" y1="25" x2="0" y2="25"/><line x1="-12" y1="50" x2="0" y2="50"/><line x1="-12" y1="75" x2="0" y2="75"/>
+      <line x1="100" y1="25" x2="112" y2="25"/><line x1="100" y1="50" x2="112" y2="50"/><line x1="100" y1="75" x2="112" y2="75"/>
+    </g>
+  </g>
+
+  <!-- wordmark -->
+  <text x="640" y="350" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="112" font-weight="800" fill="#f2f4f8">Slick<tspan fill="url(#accent)">Stick</tspan></text>
+
+  <!-- tagline -->
+  <text x="640" y="410" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="34" font-weight="600" fill="#e7ecf5">Build bootable macOS installer USBs &#8212; without a Mac</text>
+
+  <!-- feature line -->
+  <text x="640" y="470" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="23" fill="#aeb6c8"><tspan fill="#5fb567" font-weight="700">&#10003; proven on Apple&#160;Silicon</tspan>&#8195;&#183;&#8195;Linux&#8209;native&#8195;&#183;&#8195;downloads from Apple&#8195;&#183;&#8195;MIT</text>
+
+  <rect x="490" y="500" width="300" height="4" rx="2" fill="url(#accent)" opacity="0.85"/>
+
+  <!-- repo -->
+  <text x="640" y="572" text-anchor="middle" font-family="ui-monospace, 'DejaVu Sans Mono', monospace" font-size="20" fill="#6f7b99">github.com/mjevange/slickstick</text>
+</svg>
