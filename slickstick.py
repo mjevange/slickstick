@@ -19,7 +19,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from lib import deps, usb
-from lib.sources import make_source, GibMacOSSource, LocalSource, UrlSource
+from lib.sources import (
+    make_source, GibMacOSSource, StickSource, LocalSource, UrlSource,
+    find_installer_volumes,
+)
 
 DEFAULT_LABEL = "Install macOS"
 
@@ -86,10 +89,14 @@ def _menu(options: list[str], prompt: str = "Choose") -> int:
         print("  Please enter a number from the list.")
 
 
-def _choose_target() -> str | None:
-    """Detect inserted USB media and let the user pick; offer rescan if none."""
+def _choose_target(exclude: str | None = None) -> str | None:
+    """Detect inserted USB media and let the user pick; offer rescan if none.
+
+    `exclude` is a whole-disk path (e.g. the source stick) to hide from the list.
+    """
     while True:
-        disks = usb.list_removable_disks()
+        disks = [d for d in usb.list_removable_disks()
+                 if exclude is None or f"/dev/{d['name']}" != exclude]
         if disks:
             return _pick_device(disks)  # None == cancelled
         try:
@@ -101,10 +108,11 @@ def _choose_target() -> str | None:
 
 
 def _execute_build(target: str, source, arch: str, reference_stick: str | None,
-                   label: str, journaled: bool, yes: bool, workdir: str | None) -> int:
+                   label: str, journaled: bool, yes: bool, workdir: str | None,
+                   source_disk: str | None = None) -> int:
     """Shared build core used by both the wizard and the `build` subcommand."""
     try:
-        usb.assert_safe_target(target)
+        usb.assert_safe_target(target, source_disk)
     except usb.BuildError as e:
         print(f"SAFETY: {e}")
         return 1
@@ -119,10 +127,21 @@ def _execute_build(target: str, source, arch: str, reference_stick: str | None,
         app = source.obtain(work)
     except Exception as e:  # noqa: BLE001 - surface any backend failure cleanly
         print(f"Failed to obtain installer from source '{source.id}': {e}")
+        source.cleanup()
         return 1
     print(f"Installer app: {app}")
 
-    reference_root = _mount_reference(reference_stick, work) if reference_stick else None
+    # Marker provenance: an explicit --reference-stick wins; otherwise a source
+    # that cloned a real stick (StickSource) exposes marker_root; otherwise the
+    # markers are synthesized inside the build.
+    own_reference = False
+    reference_root = None
+    if reference_stick:
+        reference_root = _mount_reference(reference_stick, work)
+        own_reference = True
+    elif getattr(source, "marker_root", None):
+        reference_root = source.marker_root
+
     try:
         if arch == "intel":
             usb.build_intel(target, app, work, label)
@@ -133,8 +152,9 @@ def _execute_build(target: str, source, arch: str, reference_stick: str | None,
         print(f"Build failed: {e}")
         return 1
     finally:
-        if reference_root is not None:
+        if own_reference and reference_root is not None:
             _umount_reference(reference_root)
+        source.cleanup()
 
     print(f"\nFinished. Test by booting {target} on the target Mac (hold power -> Options).")
     return 0
@@ -145,12 +165,14 @@ def cmd_build(args) -> int:
     if deps.missing():
         print("Missing dependencies — run: slickstick deps")
         return 1
-    target = args.device or _choose_target()
+    source_disk = usb.parent_disk(args.stick) if getattr(args, "stick", None) else None
+    target = args.device or _choose_target(exclude=source_disk)
     if not target:
         print("Cancelled.")
         return 1
     return _execute_build(target, make_source(args), args.arch, args.reference_stick,
-                          args.label or DEFAULT_LABEL, args.journaled, args.yes, args.workdir)
+                          args.label or DEFAULT_LABEL, args.journaled, args.yes, args.workdir,
+                          source_disk=source_disk)
 
 
 def cmd_wizard(args) -> int:
@@ -166,13 +188,29 @@ def cmd_wizard(args) -> int:
     print("\nHow should SlickStick get macOS?")
     pick = _menu([
         "Download from Apple via gibMacOS (recommended)",
-        "Use files I already have (Install app, .pkg, or mounted stick)",
+        "Clone from an inserted macOS installer stick (real markers, proven)",
+        "Use files I already have (an Install app or a .pkg)",
         "Download a direct InstallAssistant.pkg URL",
     ])
+    source_disk = None
     if pick == 0:
         source = GibMacOSSource()
     elif pick == 1:
-        source = LocalSource(input("  Path to an Install app, a .pkg, or a mounted stick: ").strip())
+        vols = find_installer_volumes()
+        if not vols:
+            print("  No inserted macOS installer sticks detected. Insert one and")
+            print("  restart SlickStick, or choose a different source.")
+            return 1
+        print("\n  Detected installer sticks:")
+        opts = []
+        for v in vols:
+            where = v["mountpoint"] or "not mounted"
+            opts.append(f'{v["path"]}  {v["size"] / 1e9:.0f} GB  "{v["label"]}"  [{where}]')
+        sel = _menu(opts, "  Clone from which stick")
+        source = StickSource(vols[sel]["path"])
+        source_disk = usb.parent_disk(vols[sel]["path"])
+    elif pick == 2:
+        source = LocalSource(input("  Path to an Install app or a .pkg: ").strip())
     else:
         source = UrlSource(input("  InstallAssistant.pkg URL: ").strip())
 
@@ -184,20 +222,15 @@ def cmd_wizard(args) -> int:
     if arch == "intel":
         print("  ! Intel is experimental and unverified; continuing anyway.")
 
-    reference = None
-    if arch == "silicon":
-        r = input("\nOptional — a known-good installer stick to copy exact root markers\n"
-                  "from (e.g. /dev/sdc), or press Enter to skip: ").strip()
-        reference = r or None
-
     print("\nNow pick the TARGET USB to erase.")
-    target = _choose_target()
+    target = _choose_target(exclude=source_disk)
     if not target:
         print("Cancelled.")
         return 1
 
-    return _execute_build(target, source, arch, reference,
-                          DEFAULT_LABEL, journaled=False, yes=False, workdir=None)
+    return _execute_build(target, source, arch, reference_stick=None,
+                          label=DEFAULT_LABEL, journaled=False, yes=False, workdir=None,
+                          source_disk=source_disk)
 
 
 def _mount_reference(dev: str, work: Path) -> Path:
@@ -232,10 +265,14 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--arch", choices=["silicon", "intel"], default="silicon",
                    help="silicon (proven) or intel (EXPERIMENTAL, unverified)")
     src = b.add_argument_group("macOS source (default: gibmacos)")
-    src.add_argument("--local", help="path to an Install app, a .pkg, or a mounted stick")
+    src.add_argument("--stick", help="clone an inserted installer stick's partition, e.g. /dev/sdc2 (real markers)")
+    src.add_argument("--local", help="path to an existing Install app or a .pkg")
     src.add_argument("--url", help="direct InstallAssistant.pkg URL (Apple CDN)")
     src.add_argument("--version", help="version hint for backends that support it")
-    b.add_argument("--reference-stick", help="a createinstallmedia stick to copy real root markers from")
+    b.add_argument("--reference-stick",
+                   help="advanced: copy real root markers from this stick when the app came "
+                        "from a non-stick source (usually unnecessary — markers are synthesized, "
+                        "or use --stick to clone a stick directly)")
     b.add_argument("--journaled", action="store_true", help="make HFS+ journaled (needs force-rw writes)")
     b.add_argument("--label", help=f"HFS+ volume label (default: {DEFAULT_LABEL!r})")
     b.add_argument("--workdir", help="where to download/extract (default: temp dir)")
