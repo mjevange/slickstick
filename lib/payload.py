@@ -17,34 +17,54 @@ from __future__ import annotations
 import os
 import plistlib
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
 
 def extract_pkg(pkg: Path, dest: Path) -> Path:
-    """Extract InstallAssistant.pkg on Linux and return the Install macOS app dir.
+    """Extract the Install app from an InstallAssistant.pkg into ``dest``.
 
-    InstallAssistant.pkg is a flat (xar) package whose Payload is a gzip cpio
-    containing ./Applications/Install macOS <name>.app. We extract the outer
-    archive, then any inner Payload, then locate the app.
+    The pkg is a xar with two relevant members: a small ``Payload`` (the app
+    skeleton, Apple **pbzx**-compressed) and a huge plain ``SharedSupport.dmg``.
+    We decode the pbzx skeleton with our stdlib decoder (no external pbzx tool)
+    and extract the dmg directly with bsdtar, then slot the dmg into the app's
+    ``Contents/SharedSupport/``. Returns the assembled app dir.
     """
     dest.mkdir(parents=True, exist_ok=True)
-    _bsdtar(pkg, dest)
-
-    # Extract any nested Payload archives (the full-installer app lives inside).
-    for payload in list(dest.rglob("Payload")) + list(dest.rglob("*.pax.gz")):
-        try:
-            _bsdtar(payload, dest)
-        except subprocess.CalledProcessError:
-            pass
-
+    _extract_skeleton(pkg, dest)
     app = locate_install_app(dest)
     if app is None:
-        raise RuntimeError(
-            f"Could not find 'Install macOS *.app' after extracting {pkg.name}. "
-            "The pkg layout may differ; try the --local source with an app you already have."
-        )
+        raise RuntimeError(f"Could not find 'Install macOS *.app' after unpacking {pkg.name}.")
+    shared = app / "Contents" / "SharedSupport"
+    shared.mkdir(parents=True, exist_ok=True)
+    _extract_member(pkg, "SharedSupport.dmg", shared / "SharedSupport.dmg")
     return app
+
+
+def _extract_skeleton(pkg: Path, dest: Path) -> None:
+    """bsdtar(Payload) | pbzx-decode | bsdtar -x  — writes the app skeleton."""
+    repo_root = Path(__file__).resolve().parent.parent
+    p1 = subprocess.Popen(["bsdtar", "-xO", "-f", str(pkg), "Payload"], stdout=subprocess.PIPE)
+    p2 = subprocess.Popen([sys.executable, "-m", "lib.pbzx"],
+                          stdin=p1.stdout, stdout=subprocess.PIPE, cwd=str(repo_root))
+    p3 = subprocess.Popen(["bsdtar", "-x", "-C", str(dest)], stdin=p2.stdout)
+    p1.stdout.close()
+    p2.stdout.close()
+    p3.communicate()
+    p1.wait()
+    p2.wait()
+    if p1.returncode or p2.returncode or p3.returncode:
+        raise RuntimeError(f"skeleton extraction failed "
+                           f"(bsdtar={p1.returncode}, pbzx={p2.returncode}, bsdtar={p3.returncode})")
+
+
+def _extract_member(pkg: Path, member: str, out: Path) -> None:
+    """Extract one plain xar member directly to a file (streams, no temp copy)."""
+    with open(out, "wb") as fh:
+        rc = subprocess.run(["bsdtar", "-xO", "-f", str(pkg), member], stdout=fh).returncode
+    if rc:
+        raise RuntimeError(f"extracting {member} from {pkg.name} failed (rc={rc})")
 
 
 def locate_install_app(root: Path) -> Path | None:
@@ -54,9 +74,6 @@ def locate_install_app(root: Path) -> Path | None:
             return cand
     return None
 
-
-def _bsdtar(archive: Path, dest: Path) -> None:
-    subprocess.run(["bsdtar", "-x", "-f", str(archive), "-C", str(dest)], check=True)
 
 
 def app_version_info(app: Path) -> dict[str, str]:
