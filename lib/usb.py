@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import threading
@@ -122,7 +123,7 @@ class SudoKeepAlive:
 
 
 def _run(cmd: list[str]) -> None:
-    ui.cmd(" ".join(cmd))
+    ui.cmd(shlex.join(cmd))   # quoted so the echoed line is copy-pasteable
     subprocess.run(cmd, check=True)
 
 
