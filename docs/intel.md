@@ -81,11 +81,22 @@ Apple, build one stick, boot — sidestepping both the MobileAsset wall and the
 two-stick clone/dongle problem. It yields a **recovery/reinstall** stick (boots →
 downloads & installs macOS), not a full offline installer.
 
-Open questions to resolve: whether `BaseSystem.dmg` is HFS+ or APFS (extract via
-`dmg2img` / `apfs-fuse` / `darling-dmg`), the exact on-stick layout
-(`com.apple.recovery.boot/` vs. a BaseSystem restored to the volume root), and a
-real-hardware boot test. Note: the Sonoma+ *recovery environment* refuses to mount
-FAT32/ExFAT, so prefer Monterey-era for an initial test.
+**Feasibility confirmed (2026-11-16):** a Monterey recovery downloaded with
+`macrecovery.py -b Mac-E43C1C25D4880AD6 -os default` gave `BaseSystem.dmg`
+(624 MB) whose inner volume is **HFS+** ("macOS Base System") — **Linux-readable
+with no `apfs-fuse`** (`7z` lists/extracts it; the raw HFS partition can be pulled
+with `7z e` and loop-mounted, no `dmg2img`/`qemu-img` needed). It contains
+`System/Library/CoreServices/boot.efi` (723,512 bytes) and **no Cryptexes** (clean,
+pre-sealed-system). Version macOS 12.5.1 / 21G83.
+
+Plan: `7z` extract the raw HFS → loop-mount ro → partition+format the target
+(GPT: EFI + HFS+) → `bsdtar`-pipe copy the BaseSystem onto it (like
+`build_intel_clone`) → optional bless → `fsck`. One stick, no clone source.
+
+Remaining: implement that build routine and do a real-hardware boot test. Prefer
+**Monterey** (pre-Cryptex, pre-Sonoma FAT32-mount caveat) for the first test;
+newer recoveries (Ventura+/Tahoe) add Cryptexes that a plain file-copy may not
+satisfy.
 
 (For *old*, pre–Big Sur macOS, the full installer used a simpler
 InstallESD/BaseSystem layout that is also likely Linux-expandable.)
@@ -99,5 +110,5 @@ InstallESD/BaseSystem layout that is also likely Linux-expandable.)
 | Bless-from-Linux (optional T2 insurance) | ✅ implemented + byte-validated |
 | Full-tree clone for Intel (`build_intel_clone`) | ✅ implemented, structure-tested |
 | **End-to-end clone → boot on real Intel hardware** | ⏳ **not yet verified** |
-| **Recovery path** (`macrecovery.py` → BaseSystem → stick) | 🔬 **promising** — pkg-free, one-stick; Apple firmware boots BaseSystem directly; to build & test |
+| **Recovery path** (`macrecovery.py` → BaseSystem → stick) | ✅ **feasibility confirmed** — BaseSystem is Linux-readable HFS+ (no apfs-fuse); build routine + hardware boot test remain |
 | full-installer pkg → Intel expansion (modern macOS) | 🔬 open future research |
