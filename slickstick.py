@@ -250,7 +250,11 @@ def _execute_build(target: str, source, arch: str, reference_stick: str | None,
                     reference_root = source.marker_root
                 build_version = getattr(source, "build_version", None)
                 if arch == "intel":
-                    usb.build_intel(target, app, work, lbl)
+                    full_root = getattr(source, "marker_root", None)
+                    if full_root is not None:
+                        usb.build_intel_clone(target, Path(full_root), work, lbl)
+                    else:
+                        usb.build_intel(target, app, work, lbl)
                 else:
                     usb.build(target, app, work, lbl, journaled=journaled,
                               reference_root=reference_root, build_version=build_version)
@@ -448,7 +452,10 @@ def _wizard_collect(args) -> dict:
         "Intel (EXPERIMENTAL — not verified to boot)",
     ]) == 0 else "intel"
     if arch == "intel":
-        print("  ! Intel is experimental and unverified; continuing anyway.")
+        print("  ! Intel is EXPERIMENTAL. It works only by cloning an inserted")
+        print("    createinstallmedia stick (pick \"Clone from a stick\" next) —")
+        print("    pkg/URL sources can't build Intel media on Linux. A bless is")
+        print("    added automatically (optional; not required on old Intel Macs).")
 
     ui.heading("\nHow should SlickStick get macOS?")
     pick = _menu([

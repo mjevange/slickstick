@@ -363,3 +363,59 @@ def build_intel(target: str, app_dir: Path, work: Path, hfs_label: str) -> None:
         bless.patch_finderinfo(hfs, {0: folder_cnid, 1: file_cnid, 5: folder_cnid})
     verify(hfs)
     print("Intel build finished (EXPERIMENTAL). Test on Intel hardware and report back.")
+
+
+# HFS+ internal/cache dirs that are per-volume state, not installer content —
+# never copy them into a fresh clone.
+_HFS_INTERNAL = [".journal", ".journal_info_block", ".Spotlight-V100",
+                 ".fseventsd", ".HFS+ Private Directory Data", ".HFS+ Private Data"]
+
+
+def build_intel_clone(target: str, stick_root: Path, work: Path, hfs_label: str) -> None:
+    """Clone a full createinstallmedia stick onto ``target`` for an Intel Mac.
+
+    build()/build_intel copy only the app; an Intel Mac boots from the *expanded*
+    tree (``System/Library/CoreServices/boot.efi``, ``BaseSystem/``, ``System/``,
+    ``Firmware/`` …), so here we copy the whole source-stick root — minus the HFS+
+    internal/cache dirs — then optionally bless.
+
+    Bless is NOT required on old Intel Macs (recognition is by the conventional
+    boot.efi path — verified on hardware 2026-11-16); we set it anyway as harmless
+    insurance for T2 Macs. EXPERIMENTAL: structure-validated; boot-test on real
+    Intel hardware. Modern-macOS pkg sources can't produce this tree on Linux, so
+    this path requires a real createinstallmedia stick to clone. See intel-oracle.md.
+    """
+    from . import bless
+
+    ui.step(1, 4, "Partitioning (GPT: ESP + Apple HFS+)")
+    esp, hfs = partition(target, hfs_label)
+    ui.step(2, 4, "Formatting (empty ESP + HFS+)")
+    format_parts(esp, hfs, hfs_label, journaled=False)
+    ui.step(3, 4, "Cloning the full installer tree (several minutes)")
+    dst = work / "dst_rw"
+    unmount_if_mounted(hfs)
+    _mount(hfs, dst, ro=False)
+    bless_targets = None
+    try:
+        excl = " ".join(f"--exclude {shlex.quote('./' + e)}" for e in _HFS_INTERNAL)
+        _run(["bash", "-c",
+              f"cd {shlex.quote(str(stick_root))} && "
+              f"sudo bsdtar -cf - {excl} . | sudo bsdtar -xpf - -C {shlex.quote(str(dst))}"])
+        subprocess.run(["sudo", "sync"])
+        boot_efi = dst / "System" / "Library" / "CoreServices" / "boot.efi"
+        if boot_efi.exists():
+            bless_targets = (bless.cnid(boot_efi.parent), bless.cnid(boot_efi))
+        else:
+            ui.warn("no System/Library/CoreServices/boot.efi copied — is the source a "
+                    "full createinstallmedia stick? (Intel needs the expanded tree)")
+    finally:
+        _umount(dst)
+    if bless_targets:
+        f_cnid, b_cnid = bless_targets
+        bless.patch_finderinfo(hfs, {0: f_cnid, 1: b_cnid, 5: f_cnid})
+        ui.ok(f"blessed boot.efi (optional T2 insurance): folder={f_cnid} file={b_cnid}")
+    ui.step(4, 4, "Verifying")
+    if verify(hfs):
+        ui.ok("Volume verified.")
+    else:
+        ui.warn("fsck reported issues — inspect before use.")
