@@ -20,12 +20,11 @@ class UrlSource(Source):
     def __init__(self, url: str):
         self.url = url
 
-    def space_needed(self) -> int:
-        # Downloaded pkg (~17) + extracted app (~18) on disk. A streaming
-        # strategy (write straight to USB) would cut this to near zero.
-        return 36 * 1024 ** 3
+    def space_needed(self, stream: bool = False) -> int:
+        # stream: only the ~17 GB pkg download. copy: pkg + extracted app ~36 GB.
+        return 17 * 1024 ** 3 if stream else 36 * 1024 ** 3
 
-    def obtain(self, workdir: Path, version: str | None = None) -> Path:
+    def fetch_pkg(self, workdir: Path) -> Path:
         if not self.url.lower().endswith(".pkg"):
             raise ValueError("--url must point at an InstallAssistant.pkg")
         workdir.mkdir(parents=True, exist_ok=True)
@@ -35,6 +34,10 @@ class UrlSource(Source):
             ["curl", "-L", "--fail", "--progress-bar", "-o", str(pkg), self.url],
             check=True,
         )
+        return pkg
+
+    def obtain(self, workdir: Path, version: str | None = None) -> Path:
+        pkg = self.fetch_pkg(workdir)
         app = payload.extract_pkg(pkg, workdir / "extracted")
         self.build_version = payload.pkg_build_version(pkg)
         return app

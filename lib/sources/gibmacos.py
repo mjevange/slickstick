@@ -27,20 +27,18 @@ class GibMacOSSource(Source):
     def __init__(self, clone_dir: Path | None = None):
         self.clone_dir = clone_dir
 
-    def space_needed(self) -> int:
-        # Downloaded pkg (~17) + extracted app (~18) on disk. A streaming
-        # strategy (write straight to USB) would cut this to near zero.
-        return 36 * 1024 ** 3
+    def space_needed(self, stream: bool = False) -> int:
+        # stream: only the ~17 GB pkg download. copy: pkg + extracted app ~36 GB.
+        return 17 * 1024 ** 3 if stream else 36 * 1024 ** 3
 
-    def obtain(self, workdir: Path, version: str | None = None) -> Path:
+    def fetch_pkg(self, workdir: Path) -> Path:
         gib = self._ensure_clone(workdir)
         dl_root = gib / "macOS Downloads"
         before = set(dl_root.rglob("InstallAssistant.pkg")) if dl_root.exists() else set()
 
         print("\nLaunching gibMacOS — pick your macOS version in its menu, then let it")
         print("finish downloading. slickstick will take over when it exits.\n")
-        script = gib / "gibMacOS.command"
-        subprocess.run([sys.executable, str(script)], cwd=str(gib))
+        subprocess.run([sys.executable, str(gib / "gibMacOS.command")], cwd=str(gib))
 
         after = set(dl_root.rglob("InstallAssistant.pkg")) if dl_root.exists() else set()
         new = sorted(after - before, key=lambda p: p.stat().st_mtime, reverse=True)
@@ -51,6 +49,10 @@ class GibMacOSSource(Source):
                 "Did the download complete? You can re-run and point --local at it."
             )
         print(f"Using downloaded pkg: {pkg}")
+        return pkg
+
+    def obtain(self, workdir: Path, version: str | None = None) -> Path:
+        pkg = self.fetch_pkg(workdir)
         app = payload.extract_pkg(pkg, workdir / "extracted")
         self.build_version = payload.pkg_build_version(pkg)
         return app

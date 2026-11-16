@@ -36,9 +36,16 @@ class Source(abc.ABC):
     def cleanup(self) -> None:
         """Release any resources (e.g. unmount) after the build. No-op default."""
 
-    def space_needed(self) -> int:
-        """Estimated free bytes required in the work dir. 0 for sources that
-        stream straight to the target (stick, an existing app)."""
+    def fetch_pkg(self, workdir: Path) -> Path | None:
+        """Return the pkg path for the *stream* strategy (downloading it into
+        workdir if needed), or None if this source has no pkg to stream (a stick
+        clone or a bare Install app)."""
+        return None
+
+    def space_needed(self, stream: bool = False) -> int:
+        """Estimated free bytes required in the work dir. `stream` = the
+        write-straight-to-USB strategy (much smaller). 0 for sources that need no
+        work dir at all."""
         return 0
 
     def list_versions(self) -> list[str]:  # optional
