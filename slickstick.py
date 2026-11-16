@@ -14,6 +14,7 @@ import argparse
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -355,6 +356,49 @@ def _local_label_guess(path: Path) -> str | None:
     return None
 
 
+def _url_head(url: str) -> tuple[bool, int, str]:
+    """HEAD a URL (following redirects): returns (reachable_2xx, size, content_type)."""
+    r = subprocess.run(["curl", "-sIL", "--max-time", "25", url],
+                       capture_output=True, text=True)
+    ok, size, ctype = False, 0, ""
+    for line in r.stdout.splitlines():
+        low = line.strip().lower()
+        if low.startswith("http/"):
+            parts = line.split()
+            ok = len(parts) > 1 and parts[1].startswith("2")
+        elif low.startswith("content-length:"):
+            try:
+                size = int(line.split(":", 1)[1].strip())
+            except ValueError:
+                pass
+        elif low.startswith("content-type:"):
+            ctype = line.split(":", 1)[1].strip()
+    return ok, size, ctype
+
+
+def _prompt_valid_url() -> tuple[str, int]:
+    """Prompt for an InstallAssistant.pkg URL and validate it at entry: it must
+    look like a .pkg, be reachable, and not be a web page. Returns (url, size)."""
+    while True:
+        url = input("  InstallAssistant.pkg URL (Ctrl-C to cancel): ").strip()
+        if not url:
+            continue
+        if not url.lower().split("?")[0].endswith(".pkg"):
+            ui.warn("That must be a direct link to an InstallAssistant.pkg (ending in .pkg).")
+            continue
+        print("  Checking the URL…")
+        ok, size, ctype = _url_head(url)
+        if not ok:
+            ui.warn("Couldn't reach that URL — it's not found or unreachable. Check the link.")
+            continue
+        if "html" in ctype.lower():
+            ui.warn("That URL returns a web page, not a pkg file.")
+            continue
+        if size:
+            ui.ok(f"Reachable — {ui.human(size)}.")
+        return url, size
+
+
 def cmd_wizard(args) -> int:
     """Guided, menu-driven build — the default when no subcommand is given."""
     ui.banner()
@@ -433,7 +477,8 @@ def _wizard_collect(args) -> dict:
         _verify_local_arch(Path(p), arch)
         default_label = _local_label_guess(Path(p)) or DEFAULT_LABEL
     else:
-        source = UrlSource(input("  InstallAssistant.pkg URL: ").strip())
+        url, size = _prompt_valid_url()
+        source = UrlSource(url, pkg_size=size)
         streamable = True
 
     strategy = "copy"

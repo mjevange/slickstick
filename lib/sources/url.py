@@ -17,11 +17,17 @@ class UrlSource(Source):
     id = "url"
     desc = "download a direct InstallAssistant.pkg URL (Apple CDN)"
 
-    def __init__(self, url: str):
+    def __init__(self, url: str, pkg_size: int = 0):
         self.url = url
+        #: real Content-Length from a HEAD at entry (0 = unknown, use estimates)
+        self.pkg_size = pkg_size
 
     def space_needed(self, stream: bool = False) -> int:
-        # stream: only the ~17 GB pkg download. copy: pkg + extracted app ~36 GB.
+        if self.pkg_size:
+            # stream: just the download. copy: download + the extracted app,
+            # which is essentially the pkg again (the dmg dominates both).
+            return self.pkg_size if stream else self.pkg_size * 2
+        # fallback when the size is unknown: ~17 GB download, ~36 GB to also extract.
         return 17 * 1024 ** 3 if stream else 36 * 1024 ** 3
 
     def fetch_pkg(self, workdir: Path) -> Path:
