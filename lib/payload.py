@@ -135,6 +135,16 @@ def pkg_build_version(pkg: Path) -> str | None:
     return f"{major}{chr(ord('A') + int(minor))}{patch}"
 
 
+def pkg_app_name(pkg: Path) -> str | None:
+    """Installer name (without .app) from the pkg's PackageInfo bundle path, e.g.
+    'Install macOS 27 Golden Gate'. Used as the volume label when streaming
+    (the app isn't extracted to disk, so we can't read its name that way)."""
+    out = subprocess.run(["bsdtar", "-xO", "-f", str(pkg), "PackageInfo"],
+                         capture_output=True, text=True).stdout
+    m = re.search(r'bundle path="\./Applications/(.+?)\.app"', out)
+    return m.group(1) if m else None
+
+
 def write_markers_from_app(app_on_volume: Path, volume_root: Path,
                            build_version: str | None = None) -> None:
     """Synthesize the root markers for a pkg-sourced build (written as root).
