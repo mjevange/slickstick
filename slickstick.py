@@ -153,6 +153,11 @@ def _execute_build(target: str, source, arch: str, reference_stick: str | None,
     strategy: "copy" extracts the app to the work dir then copies it onto the USB;
     "stream" writes straight onto the USB from the pkg (~0 scratch space).
     """
+    label_err = _label_error(label)
+    if label_err:
+        ui.err(f"Volume name won't work — {label_err}.")
+        return 1
+
     try:
         usb.assert_safe_target(target, source_disk)
     except usb.BuildError as e:
@@ -295,6 +300,24 @@ def _verify_local_arch(path: Path, arch: str) -> None:
                 "it won't boot on an Intel Mac.")
 
 
+def _label_error(name: str) -> str | None:
+    """Reason a volume name is incompatible with HFS+, or None if it's fine.
+
+    Spaces and symbols like # % $ & @ are all valid (the default name itself has
+    spaces); only ':' (HFS+'s path separator), control characters, and names
+    longer than 255 characters are rejected.
+    """
+    if not name:
+        return None
+    if len(name) > 255:
+        return f"too long ({len(name)} chars; HFS+ allows up to 255)"
+    if ":" in name:
+        return "':' isn't allowed — HFS+ uses it as the path separator"
+    if any(ord(c) < 32 or ord(c) == 127 for c in name):
+        return "control characters aren't allowed"
+    return None
+
+
 def _local_label_guess(path: Path) -> str | None:
     """The installer's bundle name (for the volume-label default), or None."""
     if path.name.endswith(".app"):
@@ -382,7 +405,13 @@ def cmd_wizard(args) -> int:
         ]) == 0 else "copy"
 
     hint = f'"{default_label}"' if default_label != DEFAULT_LABEL else "named after the macOS version"
-    name = input(f"\n  Choose a USB volume name (Enter = {hint}): ").strip()
+    while True:
+        name = input(f"\n  Choose a USB volume name (Enter = {hint}): ").strip()
+        err = _label_error(name)
+        if err:
+            ui.warn(f"That name won't work — {err}. Try another.")
+            continue
+        break
     label = name or default_label
 
     ui.heading("\nNow pick the TARGET USB to erase.")
