@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 import plistlib
+import re
 import shlex
 import subprocess
 import sys
@@ -119,9 +120,38 @@ def app_version_info(app: Path) -> dict[str, str]:
 
 # The destination volume is mounted by root, so all writes to it go through sudo
 # (same as the installer-app copy) — a plain Python write would be EACCES.
-def write_markers_from_app(app_on_volume: Path, volume_root: Path) -> None:
-    """Synthesize the root markers for a pkg-sourced build (written as root)."""
-    info = app_version_info(app_on_volume)
+def pkg_build_version(pkg: Path) -> str | None:
+    """Decode the macOS build from the pkg's PackageInfo version.
+
+    The full-installer pkg encodes the build as a dotted version, e.g.
+    ``26.1.131`` -> ``26B131`` (minor 1 -> letter 'B'). Returns None if absent.
+    """
+    out = subprocess.run(["bsdtar", "-xO", "-f", str(pkg), "PackageInfo"],
+                         capture_output=True, text=True).stdout
+    m = re.search(r'version="(\d+)\.(\d+)\.(\d+)"', out)
+    if not m:
+        return None
+    major, minor, patch = m.groups()
+    return f"{major}{chr(ord('A') + int(minor))}{patch}"
+
+
+def write_markers_from_app(app_on_volume: Path, volume_root: Path,
+                           build_version: str | None = None) -> None:
+    """Synthesize the root markers for a pkg-sourced build (written as root).
+
+    Apple Silicon's startup picker lists a volume only if its root
+    ``.IAPhysicalMedia`` carries all three of ``AppName``, ``ProductVersion`` and
+    ``ProductBuildVersion`` (see docs/how-it-works.md) — so the build version is
+    required, not optional. The icon is cosmetic but copied so the volume shows
+    the macOS logo in the picker.
+    """
+    info = app_version_info(app_on_volume)          # {AppName, ProductVersion}
+    if build_version:
+        info["ProductBuildVersion"] = build_version
+    else:
+        ui.warn("no build version available — the stick may not be recognized "
+                "(synthesized markers need ProductBuildVersion; use a pkg source)")
+
     fd, tmp = tempfile.mkstemp(suffix=".IAPhysicalMedia")
     try:
         with os.fdopen(fd, "wb") as fh:
@@ -130,6 +160,11 @@ def write_markers_from_app(app_on_volume: Path, volume_root: Path) -> None:
     finally:
         os.unlink(tmp)
     subprocess.run(["sudo", "mkdir", "-p", str(volume_root / "restore")], check=True)
+
+    # Cosmetic: give the volume the installer's icon in the boot picker.
+    icns = app_on_volume / "Contents" / "Resources" / "InstallAssistant.icns"
+    if icns.exists():
+        subprocess.run(["sudo", "cp", str(icns), str(volume_root / ".VolumeIcon.icns")])
 
 
 def copy_markers_from_stick(src_root: Path, volume_root: Path) -> list[str]:
