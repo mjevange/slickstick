@@ -38,7 +38,8 @@ class GibMacOSSource(Source):
 
         print("\nLaunching gibMacOS — pick your macOS version in its menu, then let it")
         print("finish downloading. slickstick will take over when it exits.\n")
-        subprocess.run([sys.executable, str(gib / "gibMacOS.command")], cwd=str(gib))
+        # gibMacOS.command is a bash wrapper; gibMacOS.py is the actual entry.
+        subprocess.run([sys.executable, str(gib / "gibMacOS.py")], cwd=str(gib))
 
         after = set(dl_root.rglob("InstallAssistant.pkg")) if dl_root.exists() else set()
         new = sorted(after - before, key=lambda p: p.stat().st_mtime, reverse=True)
