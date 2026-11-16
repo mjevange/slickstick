@@ -88,11 +88,12 @@ Just run it — the guided **wizard** walks you through everything:
 slickstick
 ```
 
-It checks your dependencies, asks where to get macOS, asks the target
-architecture, then **detects your inserted USB, lists it, has you pick it, and
-makes you type the device name to confirm** before erasing anything. Run it as
-your **normal user** — it uses `sudo` only for the privileged partition/format
-steps and prompts for your password then. No flags to memorize.
+It checks your dependencies, asks where to get macOS, the target architecture,
+whether you'll make more than one USB (keep the files or not), and an optional
+name — then **detects your inserted USB, lists it, has you pick it, and makes you
+type the device name to confirm** before erasing anything. Run it as your
+**normal user** — it uses `sudo` only for the privileged partition/format steps
+and prompts for your password then. No flags to memorize.
 
 > Running from a git clone instead of the installer? Use `python3 slickstick.py`
 > everywhere you see `slickstick` below.
@@ -113,7 +114,19 @@ slickstick build -d /dev/sdb --url "https://.../InstallAssistant.pkg"
 
 # clone an inserted installer stick (real markers — the proven path)
 slickstick build -d /dev/sdb --stick /dev/sdc2
+
+# stream straight to the USB from a pkg — ~0 scratch space, no 18 GB work dir
+slickstick build -d /dev/sdb --local /path/InstallAssistant.pkg --strategy stream
+
+# name the USB (shown in the Mac's startup picker; cosmetic)
+slickstick build -d /dev/sdb --local /path/InstallAssistant.pkg --label "My Recovery Stick"
 ```
+
+**Strategies** (pkg sources): `--strategy copy` (default) extracts to the work dir
+then copies onto the USB — keeps the ~18 GB app so extra USBs are an instant
+re-copy. `--strategy stream` writes straight onto the USB from the pkg — **~0
+scratch space**, keeps nothing (ideal when disk is tight or the pkg is on a
+network share).
 </details>
 
 ## macOS sources

@@ -133,6 +133,7 @@ def _execute_build(target: str, source, arch: str, reference_stick: str | None,
         return 1
 
     streaming = strategy == "stream"
+    created_work = workdir is None
     work = Path(workdir) if workdir else Path(
         tempfile.mkdtemp(prefix="work-", dir=str(_default_work_base())))
     work.mkdir(parents=True, exist_ok=True)
@@ -203,6 +204,10 @@ def _execute_build(target: str, source, arch: str, reference_stick: str | None,
         if own_reference and reference_root is not None:
             _umount_reference(reference_root)
         source.cleanup()
+        # "stream" means keep nothing — drop our temp work dir (and any pkg we
+        # downloaded into it). "copy" keeps it (that's the whole point).
+        if created_work and streaming:
+            shutil.rmtree(work, ignore_errors=True)
 
     print()
     ui.ok(f"Finished. Test by booting {target} on the target Mac (hold power -> Options).")
@@ -344,7 +349,8 @@ def build_parser() -> argparse.ArgumentParser:
                         "from a non-stick source (usually unnecessary — markers are synthesized, "
                         "or use --stick to clone a stick directly)")
     b.add_argument("--journaled", action="store_true", help="make HFS+ journaled (needs force-rw writes)")
-    b.add_argument("--label", help=f"HFS+ volume label (default: {DEFAULT_LABEL!r})")
+    b.add_argument("--label", help="USB name shown in the Mac's startup picker "
+                                   "(cosmetic; default: auto from the installer name)")
     b.add_argument("--workdir", help="where to download/extract (default: ~/.cache/slickstick)")
     b.add_argument("-y", "--yes", action="store_true", help="skip the typed wipe confirmation")
     b.set_defaults(func=cmd_build)
