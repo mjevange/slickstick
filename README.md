@@ -25,7 +25,7 @@ content copy over Linux's own `hfsplus` driver is enough. See
 | Path | State |
 |------|-------|
 | **Apple Silicon**, cloned from an installer stick (`--stick`) | ✅ **Proven** — boots to the installer |
-| **Apple Silicon**, from a pkg (synthesized markers) | 🧪 Builds cleanly; boot test inconclusive — **re-verifying** |
+| **Apple Silicon**, from a pkg (synthesized markers) | ✅ **Proven** — lists (with icon) + boots on hardware |
 | **Intel** | 🧪 **Experimental & unverified** — different boot path (EFI + real bless); no Intel Mac has tested it |
 
 This is a tool for making install media for **Macs you own**. It erases the
@@ -132,18 +132,25 @@ New backends slot into `lib/sources/` behind a small interface.
 A `createinstallmedia` stick carries small root files (`.IAPhysicalMedia`,
 `restore/`, `.VolumeIcon.icns`) that the pkg doesn't:
 
-- **stick source** → copies the **real** markers verbatim (boot-verified).
-- **any other source** → **synthesizes** them from the app's version info.
-  Builds cleanly; **not yet boot-verified** (a boot test was inconclusive).
+- **stick source** → copies the **real** markers verbatim.
+- **any other source** → **synthesizes** `.IAPhysicalMedia` (`AppName`,
+  `ProductBuildVersion` decoded from the pkg, `ProductVersion`) + a volume icon.
+  Boot-verified on hardware — these are the exact fields the picker requires (see
+  [docs/recognition-rules.md](docs/recognition-rules.md)).
 - **`--reference-stick /dev/sdX`** → copy real markers onto an app that came
-  from a non-stick source — useful for isolating whether markers matter.
+  from a non-stick source. Rarely needed now.
 
 ## How it works
 
-The short version: GPT (empty ESP + Apple HFS+) → non-journaled HFS+ →
-content-faithful copy of the installer → `fsck`. No bless, no CNID patching on
-Apple Silicon. The full write-up, including how the "zero bless" was discovered
-and why Intel is harder, is in **[docs/how-it-works.md](docs/how-it-works.md)**.
+The short version: GPT (Apple-HFS+-typed partition) → HFS+ → content-faithful
+copy of the installer → a synthesized `.IAPhysicalMedia` marker → `fsck`. No
+bless, no signing, no SharedSupport dive.
+
+- **[docs/recognition-rules.md](docs/recognition-rules.md)** — the empirically
+  reverse-engineered rule for *exactly* what Apple Silicon requires to list and
+  boot a USB installer (with the full test matrix). The genuinely novel finding.
+- **[docs/how-it-works.md](docs/how-it-works.md)** — the build method, the
+  pbzx/dmg extraction, the "zero bless" discovery, and why Intel is harder.
 
 ## The story — why this "couldn't" be done, and how we proved it could
 
@@ -195,9 +202,8 @@ booted into the macOS installer's Recovery Assistant** — the same behavior as 
 `createinstallmedia` stick. Theory proven: a bootable Apple Silicon installer,
 built with no Mac in the loop.
 
-*Scope:* the stick-clone path is proven to **boot to the installer** on real
-hardware. The pkg (synthesized-marker) path builds cleanly but is **not yet
-boot-verified**, and Intel is open — see the [Status](#status--read-this) table.
+*Scope:* both the stick-clone and pkg (synthesized-marker) paths are proven to
+**list + boot** on real hardware. Intel is open — see the [Status](#status--read-this) table.
 
 ## Safety
 
