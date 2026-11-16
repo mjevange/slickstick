@@ -51,7 +51,9 @@ class GibMacOSSource(Source):
                 "Did the download complete? You can re-run and point --local at it."
             )
         print(f"Using downloaded pkg: {pkg}")
-        return payload.extract_pkg(pkg, workdir / "extracted")
+        app = payload.extract_pkg(pkg, workdir / "extracted")
+        self.build_version = payload.pkg_build_version(pkg)
+        return app
 
     def _ensure_clone(self, workdir: Path) -> Path:
         target = self.clone_dir or (workdir / "gibMacOS")

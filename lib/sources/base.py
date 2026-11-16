@@ -20,6 +20,9 @@ class Source(abc.ABC):
     #: volume root here, so the builder copies the *real* root markers instead
     #: of synthesizing them. Left None by sources that don't have them.
     marker_root: Path | None = None
+    #: macOS build (e.g. "26B131") decoded from a pkg, needed to synthesize the
+    #: .IAPhysicalMedia marker. Set by pkg-based sources; None otherwise.
+    build_version: str | None = None
 
     @abc.abstractmethod
     def obtain(self, workdir: Path, version: str | None = None) -> Path:

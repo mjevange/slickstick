@@ -35,4 +35,6 @@ class UrlSource(Source):
             ["curl", "-L", "--fail", "--progress-bar", "-o", str(pkg), self.url],
             check=True,
         )
-        return payload.extract_pkg(pkg, workdir / "extracted")
+        app = payload.extract_pkg(pkg, workdir / "extracted")
+        self.build_version = payload.pkg_build_version(pkg)
+        return app

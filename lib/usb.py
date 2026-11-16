@@ -200,7 +200,8 @@ def _umount(mp: Path) -> None:
 
 
 def copy_installer(hfs_part: str, app_dir: Path, work: Path,
-                   reference_root: Path | None = None) -> None:
+                   reference_root: Path | None = None,
+                   build_version: str | None = None) -> None:
     """Copy the Install app onto the HFS+ volume and lay the root markers.
 
     If reference_root (a mounted createinstallmedia stick) is given, its real
@@ -224,8 +225,8 @@ def copy_installer(hfs_part: str, app_dir: Path, work: Path,
             copied = payload.copy_markers_from_stick(reference_root, dst)
             ui.ok(f"copied real root markers: {', '.join(copied)}")
         else:
-            payload.write_markers_from_app(app_on_vol, dst)
-            ui.ok("synthesized root markers (.IAPhysicalMedia, restore/)")
+            payload.write_markers_from_app(app_on_vol, dst, build_version)
+            ui.ok("synthesized root markers (.IAPhysicalMedia + icon, restore/)")
         subprocess.run(["sudo", "sync"])
     finally:
         _umount(dst)
@@ -296,8 +297,8 @@ def build_streaming(target: str, pkg: Path, work: Path, hfs_label: str) -> None:
     _mount(hfs, dst, ro=False)
     try:
         app = stream_app_to_target(pkg, dst, repo_root)
-        payload.write_markers_from_app(app, dst)
-        ui.ok("synthesized root markers (.IAPhysicalMedia, restore/)")
+        payload.write_markers_from_app(app, dst, payload.pkg_build_version(pkg))
+        ui.ok("synthesized root markers (.IAPhysicalMedia + icon, restore/)")
         subprocess.run(["sudo", "sync"])
     finally:
         _umount(dst)
@@ -309,14 +310,16 @@ def build_streaming(target: str, pkg: Path, work: Path, hfs_label: str) -> None:
 
 
 def build(target: str, app_dir: Path, work: Path, hfs_label: str,
-          journaled: bool = False, reference_root: Path | None = None) -> None:
+          journaled: bool = False, reference_root: Path | None = None,
+          build_version: str | None = None) -> None:
     """Full Apple Silicon build pipeline (copy an already-unpacked app)."""
     ui.step(1, 4, "Partitioning (GPT: ESP + Apple HFS+)")
     esp, hfs = partition(target, hfs_label)
     ui.step(2, 4, "Formatting (empty ESP + HFS+)")
     format_parts(esp, hfs, hfs_label, journaled=journaled)
     ui.step(3, 4, "Copying installer content")
-    copy_installer(hfs, app_dir, work, reference_root=reference_root)
+    copy_installer(hfs, app_dir, work, reference_root=reference_root,
+                   build_version=build_version)
     ui.step(4, 4, "Verifying")
     if verify(hfs):
         ui.ok("Volume verified.")

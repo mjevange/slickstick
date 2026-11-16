@@ -43,6 +43,8 @@ class LocalSource(Source):
 
         # A pkg file?
         if p.is_file() and p.suffix == ".pkg":
-            return payload.extract_pkg(p, workdir / "extracted")
+            app = payload.extract_pkg(p, workdir / "extracted")
+            self.build_version = payload.pkg_build_version(p)
+            return app
 
         raise RuntimeError(f"Don't know how to use --local path: {p}")

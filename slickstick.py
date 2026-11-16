@@ -174,13 +174,14 @@ def _execute_build(target: str, source, arch: str, reference_stick: str | None,
     elif getattr(source, "marker_root", None):
         reference_root = source.marker_root
 
+    build_version = getattr(source, "build_version", None)
     try:
         with usb.SudoKeepAlive():
             if arch == "intel":
                 usb.build_intel(target, app, work, label)
             else:
-                usb.build(target, app, work, label,
-                          journaled=journaled, reference_root=reference_root)
+                usb.build(target, app, work, label, journaled=journaled,
+                          reference_root=reference_root, build_version=build_version)
     except usb.BuildError as e:
         print(f"Build failed: {e}")
         return 1
