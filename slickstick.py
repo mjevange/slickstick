@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -23,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib import deps, payload, usb, ui
 from lib.sources import (
     make_source, GibMacOSSource, StickSource, LocalSource, UrlSource,
-    find_installer_volumes,
+    find_installer_volumes, gibmacos,
 )
 
 DEFAULT_LABEL = "Install macOS"
@@ -255,6 +256,57 @@ def cmd_build(args) -> int:
                           source_disk=source_disk, strategy=args.strategy)
 
 
+_NAME_VER = {
+    "big sur": 11, "monterey": 12, "ventura": 13, "sonoma": 14,
+    "sequoia": 15, "tahoe": 26, "golden gate": 27,
+}
+
+
+def _installer_major(path: Path) -> int:
+    """Best-effort macOS major version of a local installer, or 0 if unknown."""
+    name = ""
+    if path.name.endswith(".app"):
+        name = path.name
+    elif path.suffix == ".pkg":
+        try:
+            name = payload.pkg_app_name(path) or ""
+        except Exception:
+            name = ""
+    low = name.lower()
+    for key, ver in _NAME_VER.items():
+        if key in low:
+            return ver
+    m = re.search(r"macos\s+(\d+)", low)
+    return int(m.group(1)) if m else 0
+
+
+def _verify_local_arch(path: Path, arch: str) -> None:
+    """Warn (don't block) if a supplied installer clearly can't boot the chosen
+    arch. Best-effort: an InstallAssistant.pkg is always Big Sur+, so the useful
+    case is Intel + an Apple-Silicon-only (macOS 27+) installer."""
+    mj = _installer_major(path)
+    if not mj:
+        return
+    if arch == "silicon" and mj < 11:
+        ui.warn(f"That looks like macOS {mj}, which predates Apple Silicon "
+                "(needs macOS 11+) — it won't boot on an M-series Mac.")
+    elif arch == "intel" and mj >= 27:
+        ui.warn(f"That looks like macOS {mj}, which is Apple-Silicon only — "
+                "it won't boot on an Intel Mac.")
+
+
+def _local_label_guess(path: Path) -> str | None:
+    """The installer's bundle name (for the volume-label default), or None."""
+    if path.name.endswith(".app"):
+        return path.name[:-4]
+    if path.suffix == ".pkg":
+        try:
+            return payload.pkg_app_name(path)
+        except Exception:
+            return None
+    return None
+
+
 def cmd_wizard(args) -> int:
     """Guided, menu-driven build — the default when no subcommand is given."""
     ui.banner()
@@ -266,6 +318,16 @@ def cmd_wizard(args) -> int:
     ui.ok("Dependencies OK.")
     print()
 
+    # Architecture first — it drives which installers we offer (and lets us
+    # check a supplied pkg against the target Mac) before anything else.
+    ui.heading("\nTarget Mac architecture?")
+    arch = "silicon" if _menu([
+        "Apple Silicon (M1/M2/M3/… — proven)",
+        "Intel (EXPERIMENTAL — not verified to boot)",
+    ]) == 0 else "intel"
+    if arch == "intel":
+        print("  ! Intel is experimental and unverified; continuing anyway.")
+
     ui.heading("\nHow should SlickStick get macOS?")
     pick = _menu([
         "Download from Apple via gibMacOS (recommended)",
@@ -275,9 +337,18 @@ def cmd_wizard(args) -> int:
     ])
     source_disk = None
     streamable = False
+    default_label = DEFAULT_LABEL
     if pick == 0:
-        source = GibMacOSSource()
+        prods = gibmacos.list_products(arch)
+        if not prods:
+            print("  No full installers in Apple's catalog for that architecture.")
+            return 1
+        ui.heading("\nWhich macOS version?")
+        sel = _menu([f'{p["title"]}  {p["version"]}  ({p["build"]})' for p in prods],
+                    "  Version")
+        source = GibMacOSSource(product=prods[sel])
         streamable = True
+        default_label = f'Install {prods[sel]["title"]}'
     elif pick == 1:
         vols = find_installer_volumes()
         if not vols:
@@ -296,17 +367,11 @@ def cmd_wizard(args) -> int:
         p = _input_path("  Path to an Install app or a .pkg (Tab to complete): ")
         source = LocalSource(p)
         streamable = p.endswith(".pkg")
+        _verify_local_arch(Path(p), arch)
+        default_label = _local_label_guess(Path(p)) or DEFAULT_LABEL
     else:
         source = UrlSource(input("  InstallAssistant.pkg URL: ").strip())
         streamable = True
-
-    ui.heading("\nTarget Mac architecture?")
-    arch = "silicon" if _menu([
-        "Apple Silicon (M1/M2/M3/… — proven)",
-        "Intel (EXPERIMENTAL — not verified to boot)",
-    ]) == 0 else "intel"
-    if arch == "intel":
-        print("  ! Intel is experimental and unverified; continuing anyway.")
 
     strategy = "copy"
     if streamable and arch == "silicon":
@@ -316,11 +381,9 @@ def cmd_wizard(args) -> int:
             "I might make more — keep the unpacked installer on disk (~18 GB) for instant re-copies",
         ]) == 0 else "copy"
 
-    print("\nWhat should the installer volume be named? (the label the Mac's")
-    print("startup picker shows — not the USB device path). Press Enter to name")
-    print("it after the macOS version, e.g. \"Install macOS 27 Golden Gate\".")
-    name = input("  Volume name: ").strip()
-    label = name or DEFAULT_LABEL
+    hint = f'"{default_label}"' if default_label != DEFAULT_LABEL else "named after the macOS version"
+    name = input(f"\n  Choose a USB volume name (Enter = {hint}): ").strip()
+    label = name or default_label
 
     ui.heading("\nNow pick the TARGET USB to erase.")
     target = _choose_target(exclude=source_disk)
