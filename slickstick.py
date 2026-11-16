@@ -305,18 +305,24 @@ def _installer_major(path: Path) -> int:
 
 
 def _verify_local_arch(path: Path, arch: str) -> None:
-    """Warn (don't block) if a supplied installer clearly can't boot the chosen
-    arch. Best-effort: an InstallAssistant.pkg is always Big Sur+, so the useful
-    case is Intel + an Apple-Silicon-only (macOS 27+) installer."""
+    """Stop (and offer to start over) if a supplied installer clearly can't boot
+    the chosen arch. Best-effort by macOS version; an unknown version passes
+    through. An InstallAssistant.pkg is always Big Sur+, so the real case this
+    catches is Intel + an Apple-Silicon-only (macOS 27+) installer."""
     mj = _installer_major(path)
     if not mj:
         return
+    reason = target = None
     if arch == "silicon" and mj < 11:
-        ui.warn(f"That looks like macOS {mj}, which predates Apple Silicon "
-                "(needs macOS 11+) — it won't boot on an M-series Mac.")
+        reason = f"macOS {mj} predates Apple Silicon (needs macOS 11+)"
+        target = "an Apple Silicon Mac"
     elif arch == "intel" and mj >= 27:
-        ui.warn(f"That looks like macOS {mj}, which is Apple-Silicon only — "
-                "it won't boot on an Intel Mac.")
+        reason = f"macOS {mj} is Apple-Silicon only"
+        target = "an Intel Mac"
+    if reason:
+        ui.err(f"That installer can't boot {target} — {reason}.")
+        input("  Press Enter to start over (or Ctrl-C to cancel): ")
+        raise _StartOver
 
 
 def _label_error(name: str) -> str | None:
