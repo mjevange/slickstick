@@ -87,6 +87,32 @@ def _default_work_base() -> Path:
     return base
 
 
+def _input_path(prompt: str) -> str:
+    """input() with Tab filesystem-path completion (spaces supported). Falls back
+    to a plain input if readline isn't available."""
+    try:
+        import glob
+        import readline
+    except ImportError:
+        return input(prompt).strip()
+
+    def completer(text, state):
+        matches = [m + ("/" if os.path.isdir(m) else "")
+                   for m in glob.glob(os.path.expanduser(text) + "*")]
+        return matches[state] if state < len(matches) else None
+
+    old_completer = readline.get_completer()
+    old_delims = readline.get_completer_delims()
+    readline.set_completer(completer)
+    readline.set_completer_delims("\n")          # whole line is the path (keep spaces)
+    readline.parse_and_bind("tab: complete")
+    try:
+        return input(prompt).strip()
+    finally:
+        readline.set_completer(old_completer)
+        readline.set_completer_delims(old_delims)
+
+
 def _menu(options: list[str], prompt: str = "Choose") -> int:
     for i, opt in enumerate(options, 1):
         print(ui.option(i, opt))
@@ -267,7 +293,7 @@ def cmd_wizard(args) -> int:
         source = StickSource(vols[sel]["path"])
         source_disk = usb.parent_disk(vols[sel]["path"])
     elif pick == 2:
-        p = input("  Path to an Install app or a .pkg: ").strip()
+        p = _input_path("  Path to an Install app or a .pkg (Tab to complete): ")
         source = LocalSource(p)
         streamable = p.endswith(".pkg")
     else:
