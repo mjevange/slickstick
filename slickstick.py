@@ -59,13 +59,16 @@ def _pick_device(disks: list[dict]) -> str | None:
     for i, d in enumerate(disks):
         idx = f"{ui.CYAN}{ui.BOLD}[{i}]{ui.RESET}"
         print(f"  {idx} /dev/{d['name']:<6} {_human(d['size']):>9}  {(d.get('model') or '').strip()}")
-    try:
-        sel = input("Pick the TARGET disk to ERASE (number, or blank to cancel): ").strip()
-    except EOFError:
-        return None
-    if not sel.isdigit() or int(sel) >= len(disks):
-        return None
-    return "/dev/" + disks[int(sel)]["name"]
+    while True:
+        try:
+            sel = input("Pick the TARGET disk to ERASE (number, or blank to cancel): ").strip()
+        except EOFError:
+            return None
+        if not sel:
+            return None
+        if sel.isdigit() and int(sel) < len(disks):
+            return "/dev/" + disks[int(sel)]["name"]
+        print(f"  Enter a number from 0 to {len(disks) - 1}, or blank to cancel.")
 
 
 def _confirm_wipe(target: str, assume_yes: bool) -> bool:
