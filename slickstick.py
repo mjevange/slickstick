@@ -396,6 +396,9 @@ def _prompt_valid_url() -> tuple[str, int]:
             continue
         if size:
             ui.ok(f"Reachable — {ui.human(size)}.")
+        ui.warn("With a custom URL (not the gibMacOS catalog) SlickStick can't verify "
+                "the installer's macOS version against your Mac's architecture and model.")
+        input("  Press Enter to confirm it's compatible and continue (Ctrl-C to cancel): ")
         return url, size
 
 
