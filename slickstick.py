@@ -316,8 +316,10 @@ def cmd_wizard(args) -> int:
             "I might make more — keep the unpacked installer on disk (~18 GB) for instant re-copies",
         ]) == 0 else "copy"
 
-    name = input("\nName for the USB (shown in the Mac's startup picker),\n"
-                 "or press Enter for the default: ").strip()
+    print("\nWhat should the installer volume be named? (the label the Mac's")
+    print("startup picker shows — not the USB device path). Press Enter to name")
+    print("it after the macOS version, e.g. \"Install macOS 27 Golden Gate\".")
+    name = input("  Volume name: ").strip()
     label = name or DEFAULT_LABEL
 
     ui.heading("\nNow pick the TARGET USB to erase.")
