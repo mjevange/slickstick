@@ -279,11 +279,15 @@ def cmd_wizard(args) -> int:
 
     strategy = "copy"
     if streamable and arch == "silicon":
-        ui.heading("\nHow should SlickStick put macOS on the USB?")
+        ui.heading("\nMaking more than one USB from this installer?")
         strategy = "stream" if _menu([
-            "Write straight to the USB — fastest, needs almost no scratch space",
-            "Unpack to disk first, then copy — keeps the ~18 GB app (needs the room)",
+            "Just this one — write straight to the USB, keep nothing (fastest, ~0 scratch space)",
+            "I might make more — keep the unpacked installer on disk (~18 GB) for instant re-copies",
         ]) == 0 else "copy"
+
+    name = input("\nName for the USB (shown in the Mac's startup picker),\n"
+                 "or press Enter for the default: ").strip()
+    label = name or DEFAULT_LABEL
 
     ui.heading("\nNow pick the TARGET USB to erase.")
     target = _choose_target(exclude=source_disk)
@@ -292,7 +296,7 @@ def cmd_wizard(args) -> int:
         return 1
 
     return _execute_build(target, source, arch, reference_stick=None,
-                          label=DEFAULT_LABEL, journaled=False, yes=False, workdir=None,
+                          label=label, journaled=False, yes=False, workdir=None,
                           source_disk=source_disk, strategy=strategy)
 
 
@@ -341,7 +345,7 @@ def build_parser() -> argparse.ArgumentParser:
                         "or use --stick to clone a stick directly)")
     b.add_argument("--journaled", action="store_true", help="make HFS+ journaled (needs force-rw writes)")
     b.add_argument("--label", help=f"HFS+ volume label (default: {DEFAULT_LABEL!r})")
-    b.add_argument("--workdir", help="where to download/extract (default: temp dir)")
+    b.add_argument("--workdir", help="where to download/extract (default: ~/.cache/slickstick)")
     b.add_argument("-y", "--yes", action="store_true", help="skip the typed wipe confirmation")
     b.set_defaults(func=cmd_build)
     return p
