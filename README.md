@@ -31,6 +31,32 @@ content copy over Linux's own `hfsplus` driver is enough. See
 This is a tool for making install media for **Macs you own**. It erases the
 target USB.
 
+## Features
+
+- **No Mac required** — partitions, formats, and lays down a bootable installer
+  entirely from Linux.
+- **Guided wizard *and* scriptable CLI** — menu-driven by default; every choice
+  is also a flag for non-interactive use.
+- **Four macOS sources** — download via **gibMacOS** (pick the exact version from
+  Apple's live catalog, in SlickStick's own menu), **clone** an inserted
+  installer stick, a **local** `.pkg`/Install app, or a direct Apple CDN **URL**.
+- **Architecture-aware** — asks Apple Silicon vs Intel up front, filters the
+  version list to match, and warns if a local installer can't boot the chosen arch.
+- **Two build strategies** — **stream** writes straight to the USB with near-zero
+  scratch space; **copy** keeps the unpacked app for instant re-flashes.
+- **Correct boot markers** — synthesizes the exact `.IAPhysicalMedia` fields the
+  Apple Silicon picker requires (boot-verified on hardware), or copies the real
+  markers when cloning a stick.
+- **Volume naming** — defaults to the chosen installer's name, fully customizable;
+  it's what the Mac's startup picker shows.
+- **Safety rails** — refuses internal disks, mounted system partitions, and the
+  source disk; requires a typed device-name confirmation before wiping.
+- **Nice touches** — Tab path-completion in the wizard, a per-distro dependency
+  checker, a one-line install that works in any shell (bash/zsh/fish), and
+  progress bars on every long operation.
+- **Few dependencies** — a pure-Python pbzx decoder and HFS+ via Linux's own
+  driver; no proprietary blobs, and no Apple software in the repo.
+
 ## Quick start
 
 **Run it once — nothing installed.** Fetches to a temp dir, runs the wizard,
@@ -66,10 +92,10 @@ bash (curl -fsSL https://raw.githubusercontent.com/mjevange/slickstick/main/run.
 - `gptfdisk` (`sgdisk`), `hfsprogs` (`mkfs.hfsplus`/`fsck.hfsplus`), `libarchive`
   (`bsdtar`), `dosfstools`, `util-linux`, `curl`, `git`, Python 3.10+
 - A USB stick **≥ 16 GB**
-- Free disk for the work dir: **~36 GB** for pkg download+extract (gibMacOS/URL),
-  ~18 GB for a local `.pkg`, and **almost none** for the stick source (it streams
-  straight to the target). SlickStick checks this before wiping anything.
-  (The planned "write only" strategy streams straight to the USB — near-zero scratch.)
+- Free disk for the work dir depends on the **strategy**: **stream** needs almost
+  none for a local `.pkg` (and ~17 GB just to *download* for gibMacOS/URL);
+  **copy** needs ~18 GB (local) to ~36 GB (download + extract). The stick-clone
+  source streams straight to the target. SlickStick checks this before wiping.
 
 Check everything at once:
 
@@ -88,12 +114,13 @@ Just run it — the guided **wizard** walks you through everything:
 slickstick
 ```
 
-It checks your dependencies, asks where to get macOS, the target architecture,
-whether you'll make more than one USB (keep the files or not), and an optional
-name — then **detects your inserted USB, lists it, has you pick it, and makes you
-type the device name to confirm** before erasing anything. Run it as your
-**normal user** — it uses `sudo` only for the privileged partition/format steps
-and prompts for your password then. No flags to memorize.
+It checks your dependencies, asks the **target architecture**, **where to get
+macOS** (and, for the gibMacOS source, which version — from Apple's live
+catalog), whether you'll make more than one USB (keep the files or not), and a
+**volume name** — then **detects your inserted USB, lists it, has you pick it,
+and makes you type the device name to confirm** before erasing anything. Run it
+as your **normal user** — it uses `sudo` only for the privileged partition/format
+steps and prompts for your password then. No flags to memorize.
 
 > Running from a git clone instead of the installer? Use `python3 slickstick.py`
 > everywhere you see `slickstick` below.
