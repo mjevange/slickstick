@@ -18,6 +18,10 @@ recognizes the installer by its *content*, not by boot metadata. So a faithful
 content copy over Linux's own `hfsplus` driver is enough. See
 [docs/how-it-works.md](docs/how-it-works.md).
 
+<p align="center">
+  <img src="assets/screenshot.svg" alt="SlickStick's interactive wizard — splash, dependency check, and the architecture / source menus" width="660">
+</p>
+
 ---
 
 ## Status — read this
