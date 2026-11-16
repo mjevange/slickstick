@@ -48,6 +48,31 @@ content faithfully.
 No bless step. No CNID patching. On a from-scratch build this produced a stick
 that an M1 recognized in the startup picker and booted into the macOS installer.
 
+## Getting the files onto the USB: copy vs stream
+
+The installer lives in Apple's `InstallAssistant.pkg` — a xar holding a small
+**pbzx**-compressed app skeleton and a huge plain `SharedSupport.dmg` (~17 GB).
+SlickStick can lay step 3 down two ways:
+
+- **copy** — decode the skeleton and extract the dmg into a work dir (~18 GB),
+  then copy the assembled app onto the USB. Keeps the unpacked app around, so
+  building a second stick is an instant re-copy.
+- **stream** — pipe the pkg straight onto the mounted USB: `bsdtar` reads the
+  pkg (as the normal user, so NFS `root_squash` is a non-issue), the skeleton is
+  pbzx-decoded in a pipe, and the dmg is `tee`'d directly to the target. Only
+  the writes to the root-mounted volume go through `sudo`. **Near-zero scratch
+  space** — nothing lands on local disk but a mount point. Ideal when the disk
+  is tight or the pkg sits on a network share.
+
+Both produce an identical on-disk result; stream just skips the work dir. The
+pbzx decoder is pure stdlib Python (`lib/pbzx.py`) — no external `pbzx` tool.
+
+The pkg itself comes from one of four sources: **gibMacOS** (its catalog parser,
+run in an isolated subprocess, lists every full installer Apple ships so you pick
+a version in SlickStick's own menu), a direct Apple **URL**, a **local** file, or
+a **stick** clone. Only the stick clone carries real `createinstallmedia`
+markers; the others synthesize them (see below).
+
 ## Why non-journaled
 
 Linux writes **non-journaled** HFS+ cleanly. It will only write a **journaled**
