@@ -11,6 +11,7 @@ See docs/how-it-works.md.
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import sys
 import tempfile
@@ -19,7 +20,7 @@ from pathlib import Path
 # Make `lib` importable no matter the current working directory.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from lib import deps, usb, ui
+from lib import deps, payload, usb, ui
 from lib.sources import (
     make_source, GibMacOSSource, StickSource, LocalSource, UrlSource,
     find_installer_volumes,
@@ -78,6 +79,14 @@ def _confirm_wipe(target: str, assume_yes: bool) -> bool:
     return ans == Path(target).name
 
 
+def _default_work_base() -> Path:
+    """Default parent for the work dir — the user's cache, NOT /tmp (often a tiny
+    tmpfs that can't hold a ~18 GB extraction)."""
+    base = Path(os.environ.get("XDG_CACHE_HOME") or (Path.home() / ".cache")) / "slickstick"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
 def _menu(options: list[str], prompt: str = "Choose") -> int:
     for i, opt in enumerate(options, 1):
         print(ui.option(i, opt))
@@ -111,25 +120,31 @@ def _choose_target(exclude: str | None = None) -> str | None:
 
 def _execute_build(target: str, source, arch: str, reference_stick: str | None,
                    label: str, journaled: bool, yes: bool, workdir: str | None,
-                   source_disk: str | None = None) -> int:
-    """Shared build core used by both the wizard and the `build` subcommand."""
+                   source_disk: str | None = None, strategy: str = "copy") -> int:
+    """Shared build core used by both the wizard and the `build` subcommand.
+
+    strategy: "copy" extracts the app to the work dir then copies it onto the USB;
+    "stream" writes straight onto the USB from the pkg (~0 scratch space).
+    """
     try:
         usb.assert_safe_target(target, source_disk)
     except usb.BuildError as e:
         print(f"SAFETY: {e}")
         return 1
 
-    work = Path(workdir) if workdir else Path(tempfile.mkdtemp(prefix="slickstick-"))
+    streaming = strategy == "stream"
+    work = Path(workdir) if workdir else Path(
+        tempfile.mkdtemp(prefix="work-", dir=str(_default_work_base())))
     work.mkdir(parents=True, exist_ok=True)
 
-    # Disk-space preflight for download/extract sources — before we wipe anything.
-    need = source.space_needed()
+    # Disk-space preflight — before we wipe anything. Streaming needs far less.
+    need = source.space_needed(stream=streaming)
     if need:
         free = shutil.disk_usage(work).free
         if free < need:
             ui.err(f"Not enough free space for the '{source.id}' source.")
             print(f"  Need ~{ui.human(need)} in {work}, but only {ui.human(free)} is free.")
-            print("  Free up space, or pass --workdir pointing at a larger disk.")
+            print("  Free up space, pass --workdir on a larger disk, or try --strategy stream.")
             source.cleanup()
             return 1
         ui.info(f"space check: {ui.human(free)} free, ~{ui.human(need)} needed — OK")
@@ -148,41 +163,40 @@ def _execute_build(target: str, source, arch: str, reference_stick: str | None,
         return 1
 
     print(f"\nSource: {source.id} — {source.desc}")
-    try:
-        app = source.obtain(work)
-    except Exception as e:  # noqa: BLE001 - surface any backend failure cleanly
-        print(f"Failed to obtain installer from source '{source.id}': {e}")
-        source.cleanup()
-        return 1
-    print(f"Installer app: {app}")
-
-    # Name the volume after the installer (e.g. "Install macOS 27 Golden Gate")
-    # unless the user set an explicit label. Matches what createinstallmedia does
-    # and reads correctly in the Mac's startup picker.
-    if label == DEFAULT_LABEL and app.name.endswith(".app"):
-        label = app.name[: -len(".app")]
-        print(f"Volume label: {label}")
-
-    # Marker provenance: an explicit --reference-stick wins; otherwise a source
-    # that cloned a real stick (StickSource) exposes marker_root; otherwise the
-    # markers are synthesized inside the build.
     own_reference = False
     reference_root = None
-    if reference_stick:
-        reference_root = _mount_reference(reference_stick, work)
-        own_reference = True
-    elif getattr(source, "marker_root", None):
-        reference_root = source.marker_root
-
-    build_version = getattr(source, "build_version", None)
     try:
         with usb.SudoKeepAlive():
-            if arch == "intel":
-                usb.build_intel(target, app, work, label)
+            if streaming:
+                pkg = source.fetch_pkg(work)
+                if pkg is None:
+                    ui.err("This source has no pkg to stream — use the copy strategy.")
+                    return 1
+                lbl = label if label != DEFAULT_LABEL else (payload.pkg_app_name(pkg) or DEFAULT_LABEL)
+                print(f"Streaming from: {pkg}")
+                usb.build_streaming(target, pkg, work, lbl)
             else:
-                usb.build(target, app, work, label, journaled=journaled,
-                          reference_root=reference_root, build_version=build_version)
+                app = source.obtain(work)
+                print(f"Installer app: {app}")
+                lbl = label
+                if lbl == DEFAULT_LABEL and app.name.endswith(".app"):
+                    lbl = app.name[: -len(".app")]
+                    print(f"Volume label: {lbl}")
+                if reference_stick:
+                    reference_root = _mount_reference(reference_stick, work)
+                    own_reference = True
+                elif getattr(source, "marker_root", None):
+                    reference_root = source.marker_root
+                build_version = getattr(source, "build_version", None)
+                if arch == "intel":
+                    usb.build_intel(target, app, work, lbl)
+                else:
+                    usb.build(target, app, work, lbl, journaled=journaled,
+                              reference_root=reference_root, build_version=build_version)
     except usb.BuildError as e:
+        print(f"Build failed: {e}")
+        return 1
+    except Exception as e:  # noqa: BLE001 - surface any backend failure cleanly
         print(f"Build failed: {e}")
         return 1
     finally:
@@ -207,7 +221,7 @@ def cmd_build(args) -> int:
         return 1
     return _execute_build(target, make_source(args), args.arch, args.reference_stick,
                           args.label or DEFAULT_LABEL, args.journaled, args.yes, args.workdir,
-                          source_disk=source_disk)
+                          source_disk=source_disk, strategy=args.strategy)
 
 
 def cmd_wizard(args) -> int:
@@ -229,8 +243,10 @@ def cmd_wizard(args) -> int:
         "Download a direct InstallAssistant.pkg URL",
     ])
     source_disk = None
+    streamable = False
     if pick == 0:
         source = GibMacOSSource()
+        streamable = True
     elif pick == 1:
         vols = find_installer_volumes()
         if not vols:
@@ -246,9 +262,12 @@ def cmd_wizard(args) -> int:
         source = StickSource(vols[sel]["path"])
         source_disk = usb.parent_disk(vols[sel]["path"])
     elif pick == 2:
-        source = LocalSource(input("  Path to an Install app or a .pkg: ").strip())
+        p = input("  Path to an Install app or a .pkg: ").strip()
+        source = LocalSource(p)
+        streamable = p.endswith(".pkg")
     else:
         source = UrlSource(input("  InstallAssistant.pkg URL: ").strip())
+        streamable = True
 
     ui.heading("\nTarget Mac architecture?")
     arch = "silicon" if _menu([
@@ -258,6 +277,14 @@ def cmd_wizard(args) -> int:
     if arch == "intel":
         print("  ! Intel is experimental and unverified; continuing anyway.")
 
+    strategy = "copy"
+    if streamable and arch == "silicon":
+        ui.heading("\nHow should SlickStick put macOS on the USB?")
+        strategy = "stream" if _menu([
+            "Write straight to the USB — fastest, needs almost no scratch space",
+            "Unpack to disk first, then copy — keeps the ~18 GB app (needs the room)",
+        ]) == 0 else "copy"
+
     ui.heading("\nNow pick the TARGET USB to erase.")
     target = _choose_target(exclude=source_disk)
     if not target:
@@ -266,7 +293,7 @@ def cmd_wizard(args) -> int:
 
     return _execute_build(target, source, arch, reference_stick=None,
                           label=DEFAULT_LABEL, journaled=False, yes=False, workdir=None,
-                          source_disk=source_disk)
+                          source_disk=source_disk, strategy=strategy)
 
 
 def _mount_reference(dev: str, work: Path) -> Path:
@@ -300,6 +327,9 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("-d", "--device", help="target disk, e.g. /dev/sdb (prompted if omitted)")
     b.add_argument("--arch", choices=["silicon", "intel"], default="silicon",
                    help="silicon (proven) or intel (EXPERIMENTAL, unverified)")
+    b.add_argument("--strategy", choices=["copy", "stream"], default="copy",
+                   help="copy: extract to the work dir then copy onto the USB (default). "
+                        "stream: write straight onto the USB from the pkg (~0 scratch space)")
     src = b.add_argument_group("macOS source (default: gibmacos)")
     src.add_argument("--stick", help="clone an inserted installer stick's partition, e.g. /dev/sdc2 (real markers)")
     src.add_argument("--local", help="path to an existing Install app or a .pkg")
