@@ -25,7 +25,7 @@ content copy over Linux's own `hfsplus` driver is enough. See
 | Path | State |
 |------|-------|
 | **Apple Silicon**, cloned from an installer stick (`--stick`) | ✅ **Proven** — boots to the installer |
-| **Apple Silicon**, from a pkg (synthesized markers) | ✅ **Proven** — boots to the installer |
+| **Apple Silicon**, from a pkg (synthesized markers) | 🧪 Builds cleanly; boot test inconclusive — **re-verifying** |
 | **Intel** | 🧪 **Experimental & unverified** — different boot path (EFI + real bless); no Intel Mac has tested it |
 
 This is a tool for making install media for **Macs you own**. It erases the
@@ -132,11 +132,11 @@ New backends slot into `lib/sources/` behind a small interface.
 A `createinstallmedia` stick carries small root files (`.IAPhysicalMedia`,
 `restore/`, `.VolumeIcon.icns`) that the pkg doesn't:
 
-- **stick source** → copies the **real** markers verbatim.
+- **stick source** → copies the **real** markers verbatim (boot-verified).
 - **any other source** → **synthesizes** them from the app's version info.
-  Boot-verified on hardware, so this is a first-class path, not a fallback.
-- **`--reference-stick /dev/sdX`** → advanced escape hatch to copy real markers
-  onto an app that came from a non-stick source. Rarely needed.
+  Builds cleanly; **not yet boot-verified** (a boot test was inconclusive).
+- **`--reference-stick /dev/sdX`** → copy real markers onto an app that came
+  from a non-stick source — useful for isolating whether markers matter.
 
 ## How it works
 
@@ -195,9 +195,9 @@ booted into the macOS installer's Recovery Assistant** — the same behavior as 
 `createinstallmedia` stick. Theory proven: a bootable Apple Silicon installer,
 built with no Mac in the loop.
 
-*Scope:* both the stick-clone and pkg (synthesized-marker) paths are proven to
-**boot to the installer** on real hardware. A full install to completion and
-Intel are still open — see the [Status](#status--read-this) table.
+*Scope:* the stick-clone path is proven to **boot to the installer** on real
+hardware. The pkg (synthesized-marker) path builds cleanly but is **not yet
+boot-verified**, and Intel is open — see the [Status](#status--read-this) table.
 
 ## Safety
 

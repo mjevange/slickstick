@@ -68,10 +68,11 @@ volume icon. SlickStick handles these in three tiers:
   markers verbatim. This is the only boot-verified path, so the wizard offers it
   as a first-class source that auto-detects inserted installer sticks.
 - **synthesized** (any other source) — `.IAPhysicalMedia` is generated from the
-  app's `Info.plist` version info and an empty `restore/` is created. **This is
-  boot-verified on real Apple Silicon hardware** — the two-part version from the
-  app is enough; the exact point-build (which lives in `SharedSupport`) turned
-  out not to matter for booting, so no catalog lookup is needed.
+  app's `Info.plist` version info and an empty `restore/` is created. Builds
+  cleanly but is **not yet boot-verified**; which marker fields (if any) a pkg
+  build needs is under active testing. (The exact build *is* derivable from the
+  pkg's `PackageInfo` version, e.g. `26.1.131` → `26B131`, if it turns out to
+  matter.)
 - **`--reference-stick`** — advanced escape hatch: copy real markers onto an app
   that came from a non-stick source. Rarely needed now that the stick source
   exists.
@@ -98,7 +99,8 @@ artifact, loudly marked experimental. Contributions and test reports welcome.
 
 ## Honest limits
 
-- Both the **stick-clone** and **pkg (synthesized-marker)** paths are proven to
-  **boot to the installer** on Apple Silicon; a full install to completion
-  wasn't run (very likely fine, but untested).
+- The **stick-clone** path is proven to **boot to the installer** on Apple
+  Silicon; a full install to completion wasn't run.
+- The **pkg (synthesized-marker)** path builds cleanly but is **not yet
+  boot-verified** — under active testing.
 - **Intel** is unverified entirely.
