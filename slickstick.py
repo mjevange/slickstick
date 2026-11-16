@@ -114,16 +114,35 @@ def _input_path(prompt: str) -> str:
         readline.set_completer_delims(old_delims)
 
 
-def _menu(options: list[str], prompt: str = "Choose") -> int:
-    for i, opt in enumerate(options, 1):
+class _StartOver(Exception):
+    """Wizard navigation: restart from the first question."""
+
+
+class _Cancelled(Exception):
+    """Wizard navigation: quit the wizard."""
+
+
+def _menu(options: list[str], prompt: str = "Choose", nav: bool = True) -> int:
+    """Numbered menu. With nav=True (the default), appends 'Start over' and
+    'Cancel' entries that raise _StartOver / _Cancelled for the wizard loop to
+    handle — a safe escape hatch on every pre-wipe selection page."""
+    nav_opts = ["↺  Start over", "✕  Cancel"] if nav else []
+    shown = options + nav_opts
+    for i, opt in enumerate(shown, 1):
         print(ui.option(i, opt))
+    n = len(shown)
     while True:
         try:
-            sel = input(f"{prompt} [1-{len(options)}]: ").strip()
+            sel = input(f"{prompt} [1-{n}]: ").strip()
         except EOFError:
-            return 0
-        if sel.isdigit() and 1 <= int(sel) <= len(options):
-            return int(sel) - 1
+            raise _Cancelled
+        if sel.isdigit() and 1 <= int(sel) <= n:
+            idx = int(sel) - 1
+            if nav and idx == len(options):
+                raise _StartOver
+            if nav and idx == len(options) + 1:
+                raise _Cancelled
+            return idx
         print("  Please enter a number from the list.")
 
 
@@ -341,6 +360,21 @@ def cmd_wizard(args) -> int:
     ui.ok("Dependencies OK.")
     print()
 
+    while True:
+        try:
+            plan = _wizard_collect(args)
+        except _StartOver:
+            print("\n↺  Starting over.\n")
+            continue
+        except (_Cancelled, KeyboardInterrupt):
+            print("\nCancelled.")
+            return 1
+        return _execute_build(**plan)
+
+
+def _wizard_collect(args) -> dict:
+    """Walk the pre-wipe selection pages and return the build params. Menu nav
+    entries raise _StartOver / _Cancelled for cmd_wizard's loop to handle."""
     # Architecture first — it drives which installers we offer (and lets us
     # check a supplied pkg against the target Mac) before anything else.
     ui.heading("\nTarget Mac architecture?")
@@ -365,7 +399,7 @@ def cmd_wizard(args) -> int:
         prods = gibmacos.list_products(arch)
         if not prods:
             print("  No full installers in Apple's catalog for that architecture.")
-            return 1
+            raise _StartOver
         ui.heading("\nWhich macOS version?")
         sel = _menu([f'{p["title"]}  {p["version"]}  ({p["build"]})' for p in prods],
                     "  Version")
@@ -375,9 +409,9 @@ def cmd_wizard(args) -> int:
     elif pick == 1:
         vols = find_installer_volumes()
         if not vols:
-            print("  No inserted macOS installer sticks detected. Insert one and")
-            print("  restart SlickStick, or choose a different source.")
-            return 1
+            print("  No inserted macOS installer sticks detected. Insert one,")
+            print("  or start over and choose a different source.")
+            raise _StartOver
         ui.heading("\n  Detected installer sticks:")
         opts = []
         for v in vols:
@@ -417,12 +451,14 @@ def cmd_wizard(args) -> int:
     ui.heading("\nNow pick the TARGET USB to erase.")
     target = _choose_target(exclude=source_disk)
     if not target:
-        print("Cancelled.")
-        return 1
+        raise _Cancelled
 
-    return _execute_build(target, source, arch, reference_stick=None,
-                          label=label, journaled=False, yes=False, workdir=None,
-                          source_disk=source_disk, strategy=strategy)
+    return {
+        "target": target, "source": source, "arch": arch,
+        "reference_stick": None, "label": label, "journaled": False,
+        "yes": False, "workdir": None, "source_disk": source_disk,
+        "strategy": strategy,
+    }
 
 
 def _mount_reference(dev: str, work: Path) -> Path:
