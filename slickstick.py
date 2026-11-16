@@ -54,21 +54,25 @@ def cmd_devices(args) -> int:
     return 0
 
 
-def _pick_device(disks: list[dict]) -> str | None:
+def _pick_device(disks: list[dict], allow_nav: bool = False) -> str | None:
     ui.heading("Removable / USB disks:")
     for i, d in enumerate(disks):
         idx = f"{ui.CYAN}{ui.BOLD}[{i}]{ui.RESET}"
         print(f"  {idx} /dev/{d['name']:<6} {_human(d['size']):>9}  {(d.get('model') or '').strip()}")
+    tail = "number" + (", s = start over" if allow_nav else "") + ", blank = cancel"
     while True:
         try:
-            sel = input("Pick the TARGET disk to ERASE (number, or blank to cancel): ").strip()
+            sel = input(f"Pick the TARGET disk to ERASE ({tail}): ").strip().lower()
         except EOFError:
             return None
         if not sel:
             return None
+        if allow_nav and sel == "s":
+            raise _StartOver
         if sel.isdigit() and int(sel) < len(disks):
             return "/dev/" + disks[int(sel)]["name"]
-        print(f"  Enter a number from 0 to {len(disks) - 1}, or blank to cancel.")
+        print(f"  Enter a number from 0 to {len(disks) - 1}"
+              + (", s to start over," if allow_nav else "") + " or blank to cancel.")
 
 
 def _confirm_wipe(target: str, assume_yes: bool) -> bool:
@@ -150,16 +154,17 @@ def _menu(options: list[str], prompt: str = "Choose", nav: bool = True) -> int:
         print("  Please enter a number from the list.")
 
 
-def _choose_target(exclude: str | None = None) -> str | None:
+def _choose_target(exclude: str | None = None, allow_nav: bool = False) -> str | None:
     """Detect inserted USB media and let the user pick; offer rescan if none.
 
     `exclude` is a whole-disk path (e.g. the source stick) to hide from the list.
+    `allow_nav` adds the wizard's Start over option to the picker.
     """
     while True:
         disks = [d for d in usb.list_removable_disks()
                  if exclude is None or f"/dev/{d['name']}" != exclude]
         if disks:
-            return _pick_device(disks)  # None == cancelled
+            return _pick_device(disks, allow_nav=allow_nav)  # None == cancelled
         try:
             r = input("No USB disk detected. Insert one and press Enter to rescan (q to quit): ").strip()
         except EOFError:
@@ -510,7 +515,7 @@ def _wizard_collect(args) -> dict:
     label = name or default_label
 
     ui.heading("\nNow pick the TARGET USB to erase.")
-    target = _choose_target(exclude=source_disk)
+    target = _choose_target(exclude=source_disk, allow_nav=True)
     if not target:
         raise _Cancelled
 
