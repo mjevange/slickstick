@@ -496,7 +496,7 @@ def _wizard_collect(args) -> dict:
             "I might make more — keep the unpacked installer on disk (~18 GB) for instant re-copies",
         ]) == 0 else "copy"
 
-    hint = f'"{default_label}"' if default_label != DEFAULT_LABEL else "named after the macOS version"
+    hint = f'"{default_label}"' if default_label != DEFAULT_LABEL else "copied from the installer"
     while True:
         name = input(f"\n  Choose a USB volume name (Enter = {hint}): ").strip()
         err = _label_error(name)
