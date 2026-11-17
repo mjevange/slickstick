@@ -22,17 +22,21 @@ MACRECOVERY_URL = ("https://raw.githubusercontent.com/acidanthera/OpenCorePkg/"
 # (the authoritative list macrecovery itself ships). Newest first. The "note"
 # flags our confidence + rough oldest-supported Intel Mac. Monterey is proven on
 # hardware and pre-Cryptex; Ventura+ add Cryptexes our file-copy may not satisfy.
+# Newest first — pick the newest your Mac supports. "note" is honest VERIFICATION
+# STATUS (not a recommendation): Monterey is hardware-verified and Big Sur uses the
+# same pre-Cryptex method; Ventura+ add Cryptexes we haven't been able to test
+# (no Cryptex-capable Intel Mac on hand) so they're unverified and may not boot.
 RECOVERY_VERSIONS = [
-    {"name": "Monterey (12)", "board": "Mac-E43C1C25D4880AD6", "os": "default",
-     "note": "recommended — proven on hardware; Intel Macs ~2015+"},
-    {"name": "Big Sur (11)", "board": "Mac-2BD1B31983FE1663", "os": "default",
-     "note": "pre-Cryptex; Intel Macs ~2013+"},
-    {"name": "Ventura (13)", "board": "Mac-B4831CEBD52A0C4C", "os": "default",
-     "note": "experimental (Cryptex); Intel Macs ~2017+"},
-    {"name": "Sonoma (14)", "board": "Mac-827FAC58A8FDFA22", "os": "default",
-     "note": "experimental (Cryptex); Intel Macs ~2018+"},
     {"name": "Sequoia (15)", "board": "Mac-7BA5B2D9E42DDD94", "os": "default",
-     "note": "experimental (Cryptex); Intel Macs ~2019+"},
+     "note": "Cryptex — UNVERIFIED with this build; Intel Macs ~2018-2020"},
+    {"name": "Sonoma (14)", "board": "Mac-827FAC58A8FDFA22", "os": "default",
+     "note": "Cryptex — UNVERIFIED with this build; Intel Macs ~2018+"},
+    {"name": "Ventura (13)", "board": "Mac-B4831CEBD52A0C4C", "os": "default",
+     "note": "Cryptex — UNVERIFIED with this build; Intel Macs ~2017+"},
+    {"name": "Monterey (12)", "board": "Mac-E43C1C25D4880AD6", "os": "default",
+     "note": "verified booting on hardware; pre-Cryptex; Intel Macs ~2015+"},
+    {"name": "Big Sur (11)", "board": "Mac-2BD1B31983FE1663", "os": "default",
+     "note": "pre-Cryptex (same method as Monterey); Intel Macs ~2013+"},
 ]
 
 

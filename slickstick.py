@@ -501,9 +501,11 @@ def _wizard_intel_recovery() -> dict:
     """Download an Apple Recovery image and build a bootable recovery stick."""
     print("\n  Downloads an Apple Recovery image and builds a bootable recovery")
     print("  stick (boots to macOS Recovery -> reinstall macOS over the internet).")
-    ui.heading("\nWhich macOS version? (pick one your target Mac supports)")
+    ui.heading("\nWhich macOS version? (pick the NEWEST your target Mac supports)")
+    print("  Monterey is hardware-verified; Ventura+ use Cryptexes we couldn't test —")
+    print("  if a Cryptex version won't boot, drop to Monterey-era and let us know.")
     opts = [f'{v["name"]} — {v["note"]}' for v in recovery.RECOVERY_VERSIONS]
-    opts.append("Enter my Mac's board-id for the newest it supports (advanced)")
+    opts.append("Let my Mac pick the newest it supports (I'll enter its board-id)")
     sel = _menu(opts, "  Version")
     if sel < len(recovery.RECOVERY_VERSIONS):
         v = recovery.RECOVERY_VERSIONS[sel]
