@@ -127,6 +127,10 @@ and makes you type the device name to confirm** before erasing anything. Run it
 as your **normal user** — it uses `sudo` only for the privileged partition/format
 steps and prompts for your password then. No flags to memorize.
 
+The wizard's opening menu also offers **Check an existing stick** — a read-only
+verifier that reports whether a stick meets the boot rules (the Apple Silicon
+recognition rule, Intel `boot.efi`, and whether it's usable as a clone source).
+
 > Running from a git clone instead of the installer? Use `python3 slickstick.py`
 > everywhere you see `slickstick` below.
 
@@ -136,6 +140,7 @@ steps and prompts for your password then. No flags to memorize.
 ```bash
 slickstick devices          # list USB disks
 slickstick deps             # check required tools
+slickstick verify /dev/sdb  # check an existing stick against the boot rules (read-only)
 
 # build to a specific disk without prompts
 slickstick build --device /dev/sdb -y
