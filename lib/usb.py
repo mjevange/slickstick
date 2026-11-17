@@ -479,6 +479,15 @@ def build_recovery(target: str, basesystem_dmg: Path, work: Path, hfs_label: str
                 bless_targets = (bless.cnid(boot_efi.parent), bless.cnid(boot_efi))
             else:
                 ui.warn("no boot.efi in the recovery — unexpected for a BaseSystem")
+            # Branded icon in the Intel Startup Manager (it reads .VolumeIcon.icns).
+            # The recovery ships a *dangling* .VolumeIcon.icns symlink -> a generic
+            # drive icon; replace it with the installer app's real icon.
+            icns = subprocess.run(["sudo", "find", str(dst), "-name", "InstallAssistant.icns"],
+                                  capture_output=True, text=True).stdout.splitlines()
+            if icns:
+                subprocess.run(["sudo", "rm", "-f", str(dst / ".VolumeIcon.icns")])
+                subprocess.run(["sudo", "cp", icns[0], str(dst / ".VolumeIcon.icns")], check=True)
+                ui.ok("added the installer's volume icon (branded)")
         finally:
             _umount(dst)
         if bless_targets:
