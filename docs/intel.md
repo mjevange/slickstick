@@ -101,6 +101,12 @@ in the Startup Manager). No OpenCore, no Mac, no pkg; bless included but not
 required. Prefer **Monterey** (pre-Cryptex, pre-Sonoma FAT32-mount caveat); newer
 recoveries (Ventura+/Tahoe) add Cryptexes a plain file-copy may not satisfy.
 
+**Usage.** Wizard: pick **Intel → Download macOS Recovery from Apple**, give the
+target Mac's board-id (About This Mac → System Report, or Recovery Terminal
+`ioreg -l | grep board-id`), choose the shipped (safe) or newest (experimental)
+version, then the target USB. CLI with a pre-downloaded image:
+`slickstick build --device /dev/sdX --recovery path/to/BaseSystem.dmg`.
+
 (For *old*, pre–Big Sur macOS, the full installer used a simpler
 InstallESD/BaseSystem layout that is also likely Linux-expandable.)
 

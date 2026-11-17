@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib import deps, payload, usb, ui
 from lib.sources import (
     make_source, GibMacOSSource, StickSource, LocalSource, UrlSource,
-    find_installer_volumes, gibmacos,
+    find_installer_volumes, gibmacos, recovery,
 )
 
 DEFAULT_LABEL = "Install macOS"
@@ -278,9 +278,35 @@ def _execute_build(target: str, source, arch: str, reference_stick: str | None,
     return 0
 
 
+def _run_recovery(target: str, dmg: Path, label: str, yes: bool,
+                  workdir: str | None = None) -> int:
+    """Safety-check, confirm, and build an Intel recovery stick from BaseSystem.dmg.
+    Shared by the CLI (--recovery) and the wizard's Intel path."""
+    try:
+        usb.assert_safe_target(target, None)
+    except usb.BuildError as e:
+        print(f"SAFETY: {e}")
+        return 1
+    if not _confirm_wipe(target, yes):
+        print("Cancelled.")
+        return 1
+    work = Path(workdir) if workdir else Path(
+        tempfile.mkdtemp(prefix="rec-", dir=str(_default_work_base())))
+    work.mkdir(parents=True, exist_ok=True)
+    try:
+        usb.ensure_sudo()
+        with usb.SudoKeepAlive():
+            usb.build_recovery(target, dmg, work, label)
+    except Exception as e:  # noqa: BLE001
+        print(f"Build failed: {e}")
+        return 1
+    print()
+    ui.ok(f"Finished. Boot {target} on the Intel Mac (hold Option) — EXPERIMENTAL.")
+    return 0
+
+
 def _execute_recovery(args) -> int:
-    """Build an Intel recovery stick from a BaseSystem.dmg (via macrecovery.py).
-    A distinct flow from the app-based build: decode the dmg, clone its HFS+."""
+    """CLI: build an Intel recovery stick from a pre-downloaded BaseSystem.dmg."""
     dmg = Path(args.recovery)
     if not dmg.is_file():
         ui.err(f"BaseSystem.dmg not found: {dmg}")
@@ -289,27 +315,7 @@ def _execute_recovery(args) -> int:
     if not target:
         print("Cancelled.")
         return 1
-    try:
-        usb.assert_safe_target(target, None)
-    except usb.BuildError as e:
-        print(f"SAFETY: {e}")
-        return 1
-    if not _confirm_wipe(target, args.yes):
-        print("Cancelled.")
-        return 1
-    work = Path(args.workdir) if args.workdir else Path(
-        tempfile.mkdtemp(prefix="rec-", dir=str(_default_work_base())))
-    work.mkdir(parents=True, exist_ok=True)
-    try:
-        usb.ensure_sudo()
-        with usb.SudoKeepAlive():
-            usb.build_recovery(target, dmg, work, args.label or DEFAULT_LABEL)
-    except Exception as e:  # noqa: BLE001
-        print(f"Build failed: {e}")
-        return 1
-    print()
-    ui.ok(f"Finished. Boot {target} on the Intel Mac (hold Option) — EXPERIMENTAL.")
-    return 0
+    return _run_recovery(target, dmg, args.label or DEFAULT_LABEL, args.yes, args.workdir)
 
 
 def cmd_build(args) -> int:
@@ -454,6 +460,83 @@ def _prompt_valid_url() -> tuple[str, int]:
         return url, size
 
 
+def _prompt_label(default: str, hint: str) -> str:
+    """Prompt for a validated HFS+ volume name, re-asking on bad input."""
+    while True:
+        name = input(f"\n  Volume name ({hint}): ").strip()
+        label = name or default
+        err = _label_error(label)
+        if err:
+            ui.warn(f"That name won't work — {err}. Try another.")
+            continue
+        return label
+
+
+def _wizard_intel() -> dict:
+    """Intel build flow: Apple Recovery download (proven) or clone a stick."""
+    ui.heading("\nHow should SlickStick build the Intel stick?")
+    if _menu([
+        "Download macOS Recovery from Apple (proven — boots real Intel Macs, 1 stick)",
+        "Clone an inserted createinstallmedia stick (full offline installer, experimental)",
+    ]) == 0:
+        return _wizard_intel_recovery()
+    return _wizard_intel_clone()
+
+
+def _wizard_intel_recovery() -> dict:
+    """Download an Apple Recovery image and build a bootable recovery stick."""
+    print("\n  Downloads an Apple Recovery image for the TARGET Mac and builds a")
+    print("  bootable recovery stick (boots to macOS Recovery -> reinstall over the net).")
+    print("\n  Tip: the target Mac's board-id is in About This Mac -> System Report,")
+    print("  or in Recovery's Terminal:  ioreg -l | grep board-id")
+    board = input("\n  Target Mac's board-id (e.g. Mac-A369DDC4E67F1C45),\n"
+                  "  or press Enter for a generic image: ").strip()
+    ui.heading("\nWhich macOS version?")
+    os_type = "default" if _menu([
+        "The macOS your Mac shipped with (safest — pre-Cryptex, proven)",
+        "The newest your Mac supports (may be Cryptex-based — experimental)",
+    ]) == 0 else "latest"
+    work = Path(tempfile.mkdtemp(prefix="rec-", dir=str(_default_work_base())))
+    try:
+        dmg = recovery.download_recovery(board, os_type, work)
+    except Exception as e:  # noqa: BLE001
+        ui.err(f"Recovery download failed: {e}")
+        raise _StartOver
+    label = _prompt_label("macOS Recovery", 'Enter for "macOS Recovery"')
+    ui.heading("\nNow pick the TARGET USB to erase.")
+    target = _choose_target(allow_nav=True)
+    if not target:
+        raise _Cancelled
+    return {"_recovery": True, "target": target, "dmg": str(dmg),
+            "label": label, "workdir": str(work)}
+
+
+def _wizard_intel_clone() -> dict:
+    """Clone a createinstallmedia stick onto a target (full offline installer)."""
+    vols = find_installer_volumes()
+    if not vols:
+        print("  No inserted createinstallmedia stick detected. Insert one,")
+        print("  or start over to use the Recovery download instead.")
+        raise _StartOver
+    ui.heading("\n  Detected installer sticks:")
+    opts = []
+    for v in vols:
+        where = v["mountpoint"] or "not mounted"
+        opts.append(f'{v["path"]}  {v["size"] / 1e9:.0f} GB  "{v["label"]}"  [{where}]')
+    sel = _menu(opts, "  Clone from which stick")
+    source = StickSource(vols[sel]["path"])
+    source_disk = usb.parent_disk(vols[sel]["path"])
+    label = _prompt_label(DEFAULT_LABEL, "Enter for the default")
+    ui.heading("\nNow pick the TARGET USB to erase.")
+    target = _choose_target(exclude=source_disk, allow_nav=True)
+    if not target:
+        raise _Cancelled
+    return {"target": target, "source": source, "arch": "intel",
+            "reference_stick": None, "label": label, "journaled": False,
+            "yes": False, "workdir": None, "source_disk": source_disk,
+            "strategy": "copy"}
+
+
 def cmd_wizard(args) -> int:
     """Guided, menu-driven build — the default when no subcommand is given."""
     ui.banner()
@@ -474,6 +557,9 @@ def cmd_wizard(args) -> int:
         except (_Cancelled, KeyboardInterrupt):
             print("\nCancelled.")
             return 1
+        if plan.pop("_recovery", False):
+            return _run_recovery(plan["target"], Path(plan["dmg"]),
+                                 plan["label"], yes=False, workdir=plan.get("workdir"))
         return _execute_build(**plan)
 
 
@@ -485,13 +571,10 @@ def _wizard_collect(args) -> dict:
     ui.heading("\nTarget Mac architecture?")
     arch = "silicon" if _menu([
         "Apple Silicon (M1/M2/M3/… — proven)",
-        "Intel (EXPERIMENTAL — not verified to boot)",
+        "Intel (recovery stick proven; or clone a full installer)",
     ]) == 0 else "intel"
     if arch == "intel":
-        print("  ! Intel is EXPERIMENTAL. It works only by cloning an inserted")
-        print("    createinstallmedia stick (pick \"Clone from a stick\" next) —")
-        print("    pkg/URL sources can't build Intel media on Linux. A bless is")
-        print("    added automatically (optional; not required on old Intel Macs).")
+        return _wizard_intel()
 
     ui.heading("\nHow should SlickStick get macOS?")
     pick = _menu([

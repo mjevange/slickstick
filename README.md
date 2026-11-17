@@ -269,6 +269,7 @@ is intended for creating install media for Macs you own. macOS is © Apple.
 **Depends on**
 
 - [corpnewt/gibMacOS](https://github.com/corpnewt/gibMacOS) — downloads macOS installers from Apple (MIT)
+- [acidanthera/OpenCorePkg](https://github.com/acidanthera/OpenCorePkg) — `macrecovery.py`, used for the Intel recovery download (BSD-3)
 
 **Prior art & inspiration** (ideas followed, not code bundled)
 
