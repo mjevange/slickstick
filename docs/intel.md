@@ -98,8 +98,8 @@ Plan: `7z` extract the raw HFS → loop-mount ro → partition+format the target
 (lib.udif) → loop-mount → partition/format → clone → bless → fsck — and it
 **booted a real Intel iMac into macOS Recovery** (orange "macOS Base System" icon
 in the Startup Manager). No OpenCore, no Mac, no pkg; bless included but not
-required. Prefer **Monterey** (pre-Cryptex, pre-Sonoma FAT32-mount caveat); newer
-recoveries (Ventura+/Tahoe) add Cryptexes a plain file-copy may not satisfy.
+required. **Monterey** is the proven default today; for Ventura+ (which adds
+`System/Cryptexes/`), see the Cryptex recon below.
 
 **Usage.** Wizard: pick **Intel → Download macOS Recovery from Apple**, give the
 target Mac's board-id (About This Mac → System Report, or Recovery Terminal
@@ -109,6 +109,29 @@ version, then the target USB. CLI with a pre-downloaded image:
 
 (For *old*, pre–Big Sur macOS, the full installer used a simpler
 InstallESD/BaseSystem layout that is also likely Linux-expandable.)
+
+## Cryptex recon — does the recovery path extend to Ventura+?
+
+Ventura (macOS 13) introduced **Cryptexes** (`System/Cryptexes/OS` and `App`),
+raising the worry that a plain file-copy couldn't reproduce a bootable Ventura+
+recovery. We settled the *structural* half of that on Linux, with no Mac:
+
+Decoded a **Ventura** `BaseSystem.dmg` (board `Mac-B4831CEBD52A0C4C`, `-os default`)
+with `lib.udif`, loop-mounted the "macOS Base System" HFS+ volume, and dissected it:
+
+- `System/Cryptexes/OS` (180 MB) and `App` (14 MB) are **plain, expanded
+  directories** of ordinary code-signed frameworks (WebKit / JavaScriptCore /
+  Safari) — **not** sealed DMGs, **not** APFS snapshots, **not** empty mount points.
+- **No** `.im4m`, trustcache, `BuildManifest`, or any in-volume seal a copy would
+  break (only `usr/bin/trustcachectl`, the tool itself).
+- `System/Library/CoreServices/boot.efi` is present — Intel-bootable by the same
+  conventional path proven on Monterey.
+
+So the Ventura recovery is a flat HFS+ volume whose Cryptexes are just files our
+`bsdtar` copy already carries. **Strong structural evidence the recovery path
+extends to Ventura+ unchanged** — pending the one thing Linux can't answer: a real
+boot (a 2018 Mac mini is ordered to confirm). Worst case, the recovery still boots
+to reinstall and only the Safari cryptex fails to verify — the core function works.
 
 ## Status
 
@@ -120,4 +143,5 @@ InstallESD/BaseSystem layout that is also likely Linux-expandable.)
 | Full-tree clone for Intel (`build_intel_clone`) | ✅ implemented |
 | **End-to-end clone → boot on real Intel hardware** | ✅ **PROVEN** — a Monterey clone built on Linux booted an Intel iMac into the full installer (branded icon) |
 | **Recovery path** (`macrecovery.py` → BaseSystem → stick) | ✅ **PROVEN on hardware** — `build --recovery` built a Monterey stick on Linux that booted a real Intel iMac into Recovery (pkg-free, one stick, pure-Python UDIF decode) |
+| **Ventura+ recovery (Cryptexes)** | 🧪 structurally viable — cryptexes are plain files, no in-volume seal; boot test pending (2018 mini) |
 | full-installer pkg → Intel expansion (modern macOS) | 🔬 open future research |
