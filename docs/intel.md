@@ -93,10 +93,13 @@ Plan: `7z` extract the raw HFS → loop-mount ro → partition+format the target
 (GPT: EFI + HFS+) → `bsdtar`-pipe copy the BaseSystem onto it (like
 `build_intel_clone`) → optional bless → `fsck`. One stick, no clone source.
 
-Remaining: implement that build routine and do a real-hardware boot test. Prefer
-**Monterey** (pre-Cryptex, pre-Sonoma FAT32-mount caveat) for the first test;
-newer recoveries (Ventura+/Tahoe) add Cryptexes that a plain file-copy may not
-satisfy.
+**PROVEN on real hardware (2026-11-16).** `slickstick build --device /dev/sdX
+--recovery BaseSystem.dmg` built a Monterey recovery stick on Linux — decode
+(lib.udif) → loop-mount → partition/format → clone → bless → fsck — and it
+**booted a real Intel iMac into macOS Recovery** (orange "macOS Base System" icon
+in the Startup Manager). No OpenCore, no Mac, no pkg; bless included but not
+required. Prefer **Monterey** (pre-Cryptex, pre-Sonoma FAT32-mount caveat); newer
+recoveries (Ventura+/Tahoe) add Cryptexes a plain file-copy may not satisfy.
 
 (For *old*, pre–Big Sur macOS, the full installer used a simpler
 InstallESD/BaseSystem layout that is also likely Linux-expandable.)
@@ -110,5 +113,5 @@ InstallESD/BaseSystem layout that is also likely Linux-expandable.)
 | Bless-from-Linux (optional T2 insurance) | ✅ implemented + byte-validated |
 | Full-tree clone for Intel (`build_intel_clone`) | ✅ implemented, structure-tested |
 | **End-to-end clone → boot on real Intel hardware** | ⏳ **not yet verified** |
-| **Recovery path** (`macrecovery.py` → BaseSystem → stick) | ✅ **feasibility confirmed** — BaseSystem is Linux-readable HFS+ (no apfs-fuse); build routine + hardware boot test remain |
+| **Recovery path** (`macrecovery.py` → BaseSystem → stick) | ✅ **PROVEN on hardware** — `build --recovery` built a Monterey stick on Linux that booted a real Intel iMac into Recovery (pkg-free, one stick, pure-Python UDIF decode) |
 | full-installer pkg → Intel expansion (modern macOS) | 🔬 open future research |

@@ -30,7 +30,8 @@ content copy over Linux's own `hfsplus` driver is enough. See
 |------|-------|
 | **Apple Silicon**, cloned from an installer stick (`--stick`) | ✅ **Proven** — boots to the installer |
 | **Apple Silicon**, from a pkg (synthesized markers) | ✅ **Proven** — lists (with icon) + boots on hardware |
-| **Intel** | 🧪 **Experimental** — builds by cloning a `createinstallmedia` stick (`build_intel_clone`); on a pre-T2 Intel Mac the bless proved **not required** and bless-from-Linux is byte-validated, but end-to-end clone→boot isn't verified yet. See [docs/intel.md](docs/intel.md) |
+| **Intel** (recovery) | ✅ **Proven** — `build --recovery` builds an Apple Recovery stick on Linux (pkg-free, one stick) that **boots a real Intel Mac into Recovery**. See [docs/intel.md](docs/intel.md) |
+| **Intel** (full installer) | 🧪 Experimental — clone a `createinstallmedia` stick (`build_intel_clone`); bless proved **not required** on pre-T2 Macs. Modern pkg→Intel is blocked (sealed asset) |
 
 This is a tool for making install media for **Macs you own**. It erases the
 target USB.
