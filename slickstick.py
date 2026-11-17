@@ -274,34 +274,47 @@ def _execute_build(target: str, source, arch: str, reference_stick: str | None,
             shutil.rmtree(work, ignore_errors=True)
 
     print()
-    ui.ok(f"Finished. Test by booting {target} on the target Mac (hold power -> Options).")
+    usb.unmount_disk(target)
+    ui.ok(f"Finished — {target} is unmounted and safe to unplug.")
+    print("  Test by booting it on the target Mac (hold power -> Options).")
     return 0
 
 
-def _run_recovery(target: str, dmg: Path, label: str, yes: bool,
+def _run_recovery(target: str, label: str, yes: bool, dmg: Path | None = None,
+                  board: str | None = None, os_type: str = "default",
                   workdir: str | None = None) -> int:
-    """Safety-check, confirm, and build an Intel recovery stick from BaseSystem.dmg.
-    Shared by the CLI (--recovery) and the wizard's Intel path."""
+    """Safety-check, (download,) confirm, build, and unmount an Intel recovery stick.
+    Pass a local ``dmg`` (CLI) or ``board``/``os_type`` to download (wizard).
+    Order: safety -> download -> confirm -> build -> unmount, so nothing heavy runs
+    until committed and a bad download fails before anything is erased."""
     try:
         usb.assert_safe_target(target, None)
     except usb.BuildError as e:
         print(f"SAFETY: {e}")
         return 1
-    if not _confirm_wipe(target, yes):
-        print("Cancelled.")
-        return 1
     work = Path(workdir) if workdir else Path(
         tempfile.mkdtemp(prefix="rec-", dir=str(_default_work_base())))
     work.mkdir(parents=True, exist_ok=True)
+    if dmg is None:
+        try:
+            dmg = recovery.download_recovery(board, os_type, work)
+        except Exception as e:  # noqa: BLE001
+            print(f"Recovery download failed: {e}")
+            return 1
+    if not _confirm_wipe(target, yes):
+        print("Cancelled.")
+        return 1
     try:
         usb.ensure_sudo()
         with usb.SudoKeepAlive():
-            usb.build_recovery(target, dmg, work, label)
+            usb.build_recovery(target, Path(dmg), work, label)
+            usb.unmount_disk(target)
     except Exception as e:  # noqa: BLE001
         print(f"Build failed: {e}")
         return 1
     print()
-    ui.ok(f"Finished. Boot {target} on the Intel Mac (hold Option) — EXPERIMENTAL.")
+    ui.ok(f"Finished — {target} is unmounted and safe to unplug.")
+    print("  Boot it on the Intel Mac: hold Option, pick the recovery. (EXPERIMENTAL)")
     return 0
 
 
@@ -315,7 +328,8 @@ def _execute_recovery(args) -> int:
     if not target:
         print("Cancelled.")
         return 1
-    return _run_recovery(target, dmg, args.label or DEFAULT_LABEL, args.yes, args.workdir)
+    return _run_recovery(target, args.label or DEFAULT_LABEL, args.yes,
+                         dmg=dmg, workdir=args.workdir)
 
 
 def cmd_build(args) -> int:
@@ -485,32 +499,28 @@ def _wizard_intel() -> dict:
 
 def _wizard_intel_recovery() -> dict:
     """Download an Apple Recovery image and build a bootable recovery stick."""
-    print("\n  Downloads an Apple Recovery image for the TARGET Mac and builds a")
-    print("  bootable recovery stick (boots to macOS Recovery -> reinstall over the net).")
-    print("\n  Tip: the target Mac's board-id is in About This Mac -> System Report,")
-    print("  or in Recovery's Terminal:  ioreg -l | grep board-id")
-    board = input("\n  Target Mac's board-id (e.g. Mac-A369DDC4E67F1C45),\n"
-                  "  or press Enter for a generic image: ").strip()
-    ui.heading("\nWhich macOS version?")
-    print("  (On 2019-2020 Intel Macs the newest may be Cryptex-based — experimental;")
-    print("   on older Macs the newest is a safe pre-Cryptex release like Monterey.)")
-    os_type = "latest" if _menu([
-        "Newest macOS your Mac supports (recommended)",
-        "The exact version your Mac shipped with (older)",
-    ]) == 0 else "default"
-    work = Path(tempfile.mkdtemp(prefix="rec-", dir=str(_default_work_base())))
-    try:
-        dmg = recovery.download_recovery(board, os_type, work)
-    except Exception as e:  # noqa: BLE001
-        ui.err(f"Recovery download failed: {e}")
-        raise _StartOver
-    label = _prompt_label("macOS Recovery", 'Enter for "macOS Recovery"')
+    print("\n  Downloads an Apple Recovery image and builds a bootable recovery")
+    print("  stick (boots to macOS Recovery -> reinstall macOS over the internet).")
+    ui.heading("\nWhich macOS version? (pick one your target Mac supports)")
+    opts = [f'{v["name"]} — {v["note"]}' for v in recovery.RECOVERY_VERSIONS]
+    opts.append("Enter my Mac's board-id for the newest it supports (advanced)")
+    sel = _menu(opts, "  Version")
+    if sel < len(recovery.RECOVERY_VERSIONS):
+        v = recovery.RECOVERY_VERSIONS[sel]
+        board, os_type = v["board"], v["os"]
+    else:
+        print("\n  board-id is in About This Mac -> System Report, or Recovery's")
+        print("  Terminal:  ioreg -l | grep board-id")
+        board = input("  Target Mac's board-id (e.g. Mac-A369DDC4E67F1C45): ").strip()
+        os_type = "latest"
     ui.heading("\nNow pick the TARGET USB to erase.")
     target = _choose_target(allow_nav=True)
     if not target:
         raise _Cancelled
-    return {"_recovery": True, "target": target, "dmg": str(dmg),
-            "label": label, "workdir": str(work)}
+    # Download happens later (after the wipe confirm) so nothing heavy runs until
+    # you're committed, and a bad board-id/download fails before anything's erased.
+    return {"_recovery": True, "target": target, "board": board,
+            "os_type": os_type, "label": "macOS Recovery"}
 
 
 def _wizard_intel_clone() -> dict:
@@ -560,8 +570,8 @@ def cmd_wizard(args) -> int:
             print("\nCancelled.")
             return 1
         if plan.pop("_recovery", False):
-            return _run_recovery(plan["target"], Path(plan["dmg"]),
-                                 plan["label"], yes=False, workdir=plan.get("workdir"))
+            return _run_recovery(plan["target"], plan["label"], yes=False,
+                                 board=plan["board"], os_type=plan["os_type"])
         return _execute_build(**plan)
 
 

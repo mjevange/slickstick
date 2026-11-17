@@ -18,6 +18,23 @@ from pathlib import Path
 MACRECOVERY_URL = ("https://raw.githubusercontent.com/acidanthera/OpenCorePkg/"
                    "master/Utilities/macrecovery/macrecovery.py")
 
+# macOS version -> (board_id, os_type), from OpenCorePkg's recovery_urls.txt
+# (the authoritative list macrecovery itself ships). Newest first. The "note"
+# flags our confidence + rough oldest-supported Intel Mac. Monterey is proven on
+# hardware and pre-Cryptex; Ventura+ add Cryptexes our file-copy may not satisfy.
+RECOVERY_VERSIONS = [
+    {"name": "Monterey (12)", "board": "Mac-E43C1C25D4880AD6", "os": "default",
+     "note": "recommended — proven on hardware; Intel Macs ~2015+"},
+    {"name": "Big Sur (11)", "board": "Mac-2BD1B31983FE1663", "os": "default",
+     "note": "pre-Cryptex; Intel Macs ~2013+"},
+    {"name": "Ventura (13)", "board": "Mac-B4831CEBD52A0C4C", "os": "default",
+     "note": "experimental (Cryptex); Intel Macs ~2017+"},
+    {"name": "Sonoma (14)", "board": "Mac-827FAC58A8FDFA22", "os": "default",
+     "note": "experimental (Cryptex); Intel Macs ~2018+"},
+    {"name": "Sequoia (15)", "board": "Mac-7BA5B2D9E42DDD94", "os": "default",
+     "note": "experimental (Cryptex); Intel Macs ~2019+"},
+]
+
 
 def _cache_base() -> Path:
     base = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
