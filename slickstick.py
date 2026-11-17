@@ -11,9 +11,12 @@ See docs/how-it-works.md.
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import plistlib
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -51,6 +54,141 @@ def cmd_devices(args) -> int:
     for d in disks:
         model = (d.get("model") or "").strip()
         print(f"  /dev/{d['name']:<6} {_human(d['size']):>9}  {model}")
+    return 0
+
+
+_APPLE_HFS_GUID = "48465300-0000-11aa-aa11-00306543ecac"   # GPT type "AF00"
+
+
+def _sudo_bytes(path: Path) -> bytes | None:
+    r = subprocess.run(["sudo", "cat", str(path)], capture_output=True)
+    return r.stdout if r.returncode == 0 else None
+
+
+def _sudo_exists(path: Path) -> bool:
+    return subprocess.run(["sudo", "test", "-e", str(path)]).returncode == 0
+
+
+def _read_bless(part_path: str) -> list[int] | None:
+    """Read the 8 finderInfo CNIDs from the HFS+ volume header (offset 1024+80),
+    via sudo so it works without running the whole tool as root."""
+    r = subprocess.run(["sudo", "dd", f"if={part_path}", "bs=1024", "skip=1",
+                        "count=1", "status=none"], capture_output=True)
+    if r.returncode != 0 or len(r.stdout) < 112:
+        return None
+    return list(struct.unpack(">8I", r.stdout[80:112]))
+
+
+def cmd_verify(args) -> int:
+    """Check a built stick against the recognition rule (AS) + the Intel boot layout.
+
+    Read-only: mounts the HFS+ volume, inspects it, unmounts. Never writes.
+    """
+    dev = args.device
+    info = subprocess.run(["lsblk", "-J", "-o", "PATH,TYPE,FSTYPE,PARTTYPE", dev],
+                          capture_output=True, text=True)
+    if info.returncode != 0:
+        ui.err(f"not a block device: {dev}")
+        return 2
+
+    nodes: list[dict] = []
+    def _walk(n: dict) -> None:
+        nodes.append(n)
+        for c in n.get("children") or []:
+            _walk(c)
+    for d in json.loads(info.stdout).get("blockdevices", []):
+        _walk(d)
+
+    this = next((n for n in nodes if n.get("path") == dev), None)
+    if this and this.get("type") == "part":
+        part = this
+    else:
+        part = next((n for n in nodes if n.get("type") == "part" and (
+            (n.get("parttype") or "").lower() == _APPLE_HFS_GUID
+            or n.get("fstype") == "hfsplus")), None)
+    if not part:
+        ui.err("no Apple HFS+ partition found on this device")
+        return 2
+
+    part_path = part["path"]
+    ui.heading(f"\nVerifying {part_path}")
+
+    def line(ok: bool, msg: str) -> None:
+        mark = f"{ui.GREEN}✓{ui.RESET}" if ok else f"{ui.DIM}·{ui.RESET}"
+        print(f"  {mark} {msg}")
+
+    af00 = (part.get("parttype") or "").lower() == _APPLE_HFS_GUID
+    hfs = part.get("fstype") == "hfsplus"
+    print(f"\n  {ui.BOLD}Geometry{ui.RESET}")
+    line(af00, "GPT partition type is Apple HFS+ (AF00)")
+    line(hfs, "filesystem is HFS+")
+
+    iaphys_ok = appname_ok = restore_ok = boot_ok = icon_ok = False
+    appname = None
+    usb.unmount_if_mounted(part_path)
+    mp = Path(tempfile.mkdtemp(prefix="ssverify-"))
+    mounted = False
+    try:
+        subprocess.run(["sudo", "mount", "-t", "hfsplus", "-o", "ro",
+                        part_path, str(mp)], check=True)
+        mounted = True
+        raw = _sudo_bytes(mp / ".IAPhysicalMedia")
+        keys: dict = {}
+        if raw:
+            try:
+                keys = plistlib.loads(raw)
+            except Exception:
+                keys = {}
+        iaphys_ok = all(k in keys for k in
+                        ("AppName", "ProductVersion", "ProductBuildVersion"))
+        appname = keys.get("AppName")
+        appname_ok = bool(appname) and _sudo_exists(mp / appname)
+        restore_ok = _sudo_exists(mp / "restore")
+        boot_ok = _sudo_exists(mp / "System/Library/CoreServices/boot.efi")
+        icon_ok = _sudo_exists(mp / ".VolumeIcon.icns")
+    except subprocess.CalledProcessError:
+        ui.warn("could not mount the HFS+ volume to inspect its contents")
+    finally:
+        if mounted:
+            usb._umount(mp)
+        subprocess.run(["rmdir", str(mp)], capture_output=True)
+
+    finfo = _read_bless(part_path)
+    bless_set = bool(finfo) and finfo[1] != 0
+
+    print(f"\n  {ui.BOLD}Apple Silicon recognition rule{ui.RESET}")
+    line(iaphys_ok, ".IAPhysicalMedia has AppName + ProductVersion + ProductBuildVersion")
+    line(appname_ok, f"AppName resolves to {appname}" if appname
+         else "AppName resolves to a real Install macOS *.app")
+    line(restore_ok, "restore/ present")
+
+    print(f"\n  {ui.BOLD}Intel boot{ui.RESET}")
+    line(boot_ok, "System/Library/CoreServices/boot.efi present")
+    if bless_set:
+        line(True, f"HFS+ bless set (boot.efi CNID {finfo[1]}) — optional T2 insurance")
+    else:
+        print(f"  {ui.DIM}·{ui.RESET} HFS+ bless not set "
+              f"{ui.DIM}(optional; pre-T2 Macs don't need it){ui.RESET}")
+
+    print(f"\n  {ui.BOLD}Cosmetic{ui.RESET}")
+    line(icon_ok, ".VolumeIcon.icns present (branded startup icon)")
+
+    as_ready = af00 and hfs and iaphys_ok and appname_ok
+    intel_ready = af00 and hfs and boot_ok
+    print()
+    if as_ready:
+        ui.ok("Apple Silicon: READY — meets the recognition rule")
+    else:
+        ui.info("Apple Silicon: not an AS installer (markers incomplete)")
+    if intel_ready:
+        ui.ok("Intel: boot layout present (boot.efi)")
+    else:
+        ui.info("Intel: no boot.efi boot layout")
+    if iaphys_ok and appname_ok and restore_ok:
+        ui.ok("Clone source: usable — real installer markers present")
+    if not (as_ready or intel_ready):
+        ui.err("This stick won't boot as a macOS installer.")
+        return 1
     return 0
 
 
@@ -562,6 +700,16 @@ def cmd_wizard(args) -> int:
     ui.ok("Dependencies OK.")
     print()
 
+    try:
+        action = _menu(["Build a bootable macOS installer USB",
+                        "Check an existing stick (verify — read-only)"],
+                       "What would you like to do?")
+    except (_Cancelled, _StartOver, KeyboardInterrupt):
+        print("\nCancelled.")
+        return 1
+    if action == 1:
+        return _wizard_verify()
+
     while True:
         try:
             plan = _wizard_collect(args)
@@ -575,6 +723,29 @@ def cmd_wizard(args) -> int:
             return _run_recovery(plan["target"], plan["label"], yes=False,
                                  board=plan["board"], os_type=plan["os_type"])
         return _execute_build(**plan)
+
+
+def _wizard_verify() -> int:
+    """Pick a stick from the wizard and run the read-only verifier."""
+    disks = usb.list_removable_disks()
+    if not disks:
+        ui.warn("No removable/USB disks found. Plug the stick in and try again.")
+        return 1
+    ui.heading("\nWhich stick should I check?  (read-only — nothing is erased)")
+    for i, d in enumerate(disks):
+        idx = f"{ui.CYAN}{ui.BOLD}[{i}]{ui.RESET}"
+        print(f"  {idx} /dev/{d['name']:<6} {_human(d['size']):>9}  "
+              f"{(d.get('model') or '').strip()}")
+    while True:
+        try:
+            sel = input(f"Pick a disk [0-{len(disks) - 1}], blank = cancel: ").strip()
+        except EOFError:
+            return 1
+        if not sel:
+            return 1
+        if sel.isdigit() and int(sel) < len(disks):
+            return cmd_verify(argparse.Namespace(device="/dev/" + disks[int(sel)]["name"]))
+        print(f"  Enter 0 to {len(disks) - 1}, or blank to cancel.")
 
 
 def _wizard_collect(args) -> dict:
@@ -693,6 +864,10 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("wizard", help="guided, menu-driven build (this is the default)").set_defaults(func=cmd_wizard)
     sub.add_parser("deps", help="check required tools").set_defaults(func=cmd_deps)
     sub.add_parser("devices", help="list removable/USB disks").set_defaults(func=cmd_devices)
+
+    v = sub.add_parser("verify", help="check a built stick against the recognition rule (read-only)")
+    v.add_argument("device", help="the stick or its HFS+ partition, e.g. /dev/sdc or /dev/sdc2")
+    v.set_defaults(func=cmd_verify)
 
     b = sub.add_parser("build", help="flag-driven build (advanced / scripting)")
     b.add_argument("-d", "--device", help="target disk, e.g. /dev/sdb (prompted if omitted)")
