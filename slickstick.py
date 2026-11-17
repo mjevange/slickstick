@@ -492,10 +492,12 @@ def _wizard_intel_recovery() -> dict:
     board = input("\n  Target Mac's board-id (e.g. Mac-A369DDC4E67F1C45),\n"
                   "  or press Enter for a generic image: ").strip()
     ui.heading("\nWhich macOS version?")
-    os_type = "default" if _menu([
-        "The macOS your Mac shipped with (safest — pre-Cryptex, proven)",
-        "The newest your Mac supports (may be Cryptex-based — experimental)",
-    ]) == 0 else "latest"
+    print("  (On 2019-2020 Intel Macs the newest may be Cryptex-based — experimental;")
+    print("   on older Macs the newest is a safe pre-Cryptex release like Monterey.)")
+    os_type = "latest" if _menu([
+        "Newest macOS your Mac supports (recommended)",
+        "The exact version your Mac shipped with (older)",
+    ]) == 0 else "default"
     work = Path(tempfile.mkdtemp(prefix="rec-", dir=str(_default_work_base())))
     try:
         dmg = recovery.download_recovery(board, os_type, work)
