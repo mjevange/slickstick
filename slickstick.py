@@ -5,8 +5,8 @@ Partitions a USB (GPT: empty ESP + Apple HFS+), formats HFS+, and copies a
 macOS installer onto it so Apple Silicon firmware boots it directly. The macOS
 files are fetched from Apple at run time (or supplied locally); none ship here.
 
-Apple Silicon is the proven path. Intel is EXPERIMENTAL and unverified.
-See docs/how-it-works.md.
+Apple Silicon is proven; Intel (recovery + full-installer clone) is proven on
+pre-T2 Macs. See docs/how-it-works.md and docs/intel.md.
 """
 from __future__ import annotations
 
@@ -452,7 +452,7 @@ def _run_recovery(target: str, label: str, yes: bool, dmg: Path | None = None,
         return 1
     print()
     ui.ok(f"Finished — {target} is unmounted and safe to unplug.")
-    print("  Boot it on the Intel Mac: hold Option, pick the recovery. (EXPERIMENTAL)")
+    print("  Boot it on the Intel Mac: hold Option, pick the recovery.")
     return 0
 
 
@@ -872,7 +872,7 @@ def build_parser() -> argparse.ArgumentParser:
     b = sub.add_parser("build", help="flag-driven build (advanced / scripting)")
     b.add_argument("-d", "--device", help="target disk, e.g. /dev/sdb (prompted if omitted)")
     b.add_argument("--arch", choices=["silicon", "intel"], default="silicon",
-                   help="silicon (proven) or intel (EXPERIMENTAL, unverified)")
+                   help="silicon, or intel (recovery + clone, proven on pre-T2 Macs)")
     b.add_argument("--strategy", choices=["copy", "stream"], default="copy",
                    help="copy: extract to the work dir then copy onto the USB (default). "
                         "stream: write straight onto the USB from the pkg (~0 scratch space)")
