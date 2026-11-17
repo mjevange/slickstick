@@ -27,12 +27,22 @@ GREEN = _c("\033[32m")
 YELLOW = _c("\033[33m")
 CYAN = _c("\033[36m")
 
+# 24-bit color only when the terminal advertises it; otherwise fall back to CYAN.
+_TRUECOLOR = _COLOR and os.environ.get("COLORTERM", "") in ("truecolor", "24bit")
+
+# "Ice" gradient for the banner: deep blue (top) -> bright cyan (bottom).
+_ICE = [(0, 120, 255), (0, 170, 255), (0, 210, 255), (90, 235, 255), (170, 248, 255)]
+
+
+def _tc(rgb: tuple[int, int, int]) -> str:
+    return f"\033[38;2;{rgb[0]};{rgb[1]};{rgb[2]}m" if _TRUECOLOR else ""
+
 
 _BANNER = r"""
   ____  _ _      _     ____  _   _      _
  / ___|| (_) ___| | __/ ___|| |_(_) ___| | __
  \___ \| | |/ __| |/ /\___ \| __| |/ __| |/ /
-  ___) | | | (__|   < \___ \| |_| | (__|   <
+  ___) | | | (__|   <  ___) | |_| | (__|   <
  |____/|_|_|\___|_|\_\|____/ \__|_|\___|_|\_\
 """
 
@@ -49,8 +59,11 @@ def link(text: str, url: str) -> str:
 def banner() -> None:
     """The initial splash: ASCII wordmark, tagline, clickable repo link."""
     art = _BANNER.strip("\n")
-    for line in art.splitlines():
-        print(f"{BOLD}{CYAN}{line}{RESET}")
+    for i, line in enumerate(art.splitlines()):
+        if _TRUECOLOR:
+            print(f"{BOLD}{_tc(_ICE[min(i, len(_ICE) - 1)])}{line}{RESET}")
+        else:
+            print(f"{BOLD}{CYAN}{line}{RESET}")
     print(f"  {BOLD}Build bootable macOS installer USBs{RESET} {DIM}— without a Mac{RESET}")
     print(f"  {DIM}{link('github.com/mjevange/slickstick', _REPO_URL)}{RESET}")
     print()
