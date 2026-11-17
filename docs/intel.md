@@ -117,7 +117,7 @@ InstallESD/BaseSystem layout that is also likely Linux-expandable.)
 | GPT + HFS+ layout | ✅ same as Apple Silicon |
 | Bless not required (recognition by content) | ✅ verified (pre-T2 Intel Mac) |
 | Bless-from-Linux (optional T2 insurance) | ✅ implemented + byte-validated |
-| Full-tree clone for Intel (`build_intel_clone`) | ✅ implemented, structure-tested |
-| **End-to-end clone → boot on real Intel hardware** | ⏳ **not yet verified** |
+| Full-tree clone for Intel (`build_intel_clone`) | ✅ implemented |
+| **End-to-end clone → boot on real Intel hardware** | ✅ **PROVEN** — a Monterey clone built on Linux booted an Intel iMac into the full installer (branded icon) |
 | **Recovery path** (`macrecovery.py` → BaseSystem → stick) | ✅ **PROVEN on hardware** — `build --recovery` built a Monterey stick on Linux that booted a real Intel iMac into Recovery (pkg-free, one stick, pure-Python UDIF decode) |
 | full-installer pkg → Intel expansion (modern macOS) | 🔬 open future research |
