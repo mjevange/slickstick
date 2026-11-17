@@ -419,3 +419,79 @@ def build_intel_clone(target: str, stick_root: Path, work: Path, hfs_label: str)
         ui.ok("Volume verified.")
     else:
         ui.warn("fsck reported issues — inspect before use.")
+
+
+def _hfs_partition_of(loop_dev: str) -> str:
+    """Return the HFS+ partition of a loop device (blkid-identified)."""
+    for i in range(1, 16):
+        part = f"{loop_dev}p{i}"
+        if not os.path.exists(part):
+            break
+        r = subprocess.run(["sudo", "blkid", "-o", "value", "-s", "TYPE", part],
+                           capture_output=True, text=True)
+        if r.stdout.strip() == "hfsplus":
+            return part
+    raise BuildError("no HFS+ partition found in the decoded BaseSystem image")
+
+
+def build_recovery(target: str, basesystem_dmg: Path, work: Path, hfs_label: str) -> None:
+    """Build an Intel recovery/installer stick from an Apple ``BaseSystem.dmg``
+    (as fetched by ``macrecovery.py``).
+
+    Decodes the dmg to a raw image (lib.udif — no dmg2img), loop-mounts its HFS+
+    'macOS Base System' partition, and clones that onto a fresh HFS+ target. The
+    result carries ``boot.efi`` at the conventional path, which a real Intel Mac
+    boots (no OpenCore; bless optional — see intel-oracle.md / docs/intel.md).
+
+    One stick, pkg-free. EXPERIMENTAL: pipeline validated; boot-test on Intel.
+    """
+    from . import bless, udif
+
+    raw = work / "basesystem.img"
+    src = work / "src_ro"
+    src.mkdir(parents=True, exist_ok=True)
+    ui.step(1, 5, "Decoding BaseSystem.dmg -> raw image")
+    udif.decode(str(basesystem_dmg), str(raw))
+
+    ui.step(2, 5, "Mounting the recovery filesystem")
+    loop = subprocess.run(["sudo", "losetup", "-fP", "--show", str(raw)],
+                          capture_output=True, text=True, check=True).stdout.strip()
+    hfs_src = _hfs_partition_of(loop)
+    subprocess.run(["sudo", "mount", "-o", "ro", "-t", "hfsplus", hfs_src, str(src)], check=True)
+    try:
+        ui.step(3, 5, "Partitioning + formatting the USB (GPT: ESP + Apple HFS+)")
+        esp, hfs = partition(target, hfs_label)
+        format_parts(esp, hfs, hfs_label, journaled=False)
+
+        ui.step(4, 5, "Copying the recovery system onto the USB")
+        dst = work / "dst_rw"
+        unmount_if_mounted(hfs)
+        _mount(hfs, dst, ro=False)
+        bless_targets = None
+        try:
+            excl = " ".join(f"--exclude {shlex.quote('./' + e)}" for e in _HFS_INTERNAL)
+            _run(["bash", "-c",
+                  f"cd {shlex.quote(str(src))} && "
+                  f"sudo bsdtar -cf - {excl} . | sudo bsdtar -xpf - -C {shlex.quote(str(dst))}"])
+            subprocess.run(["sudo", "sync"])
+            boot_efi = dst / "System" / "Library" / "CoreServices" / "boot.efi"
+            if boot_efi.exists():
+                bless_targets = (bless.cnid(boot_efi.parent), bless.cnid(boot_efi))
+            else:
+                ui.warn("no boot.efi in the recovery — unexpected for a BaseSystem")
+        finally:
+            _umount(dst)
+        if bless_targets:
+            f_cnid, b_cnid = bless_targets
+            bless.patch_finderinfo(hfs, {0: f_cnid, 1: b_cnid, 5: f_cnid})
+            ui.ok(f"blessed boot.efi (optional T2 insurance): folder={f_cnid} file={b_cnid}")
+    finally:
+        subprocess.run(["sudo", "umount", str(src)])
+        subprocess.run(["sudo", "losetup", "-d", loop])
+
+    ui.step(5, 5, "Verifying")
+    if verify(hfs):
+        ui.ok("Volume verified.")
+    else:
+        ui.warn("fsck reported issues — inspect before use.")
+    raw.unlink(missing_ok=True)

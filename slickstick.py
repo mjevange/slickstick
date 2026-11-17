@@ -278,11 +278,47 @@ def _execute_build(target: str, source, arch: str, reference_stick: str | None,
     return 0
 
 
+def _execute_recovery(args) -> int:
+    """Build an Intel recovery stick from a BaseSystem.dmg (via macrecovery.py).
+    A distinct flow from the app-based build: decode the dmg, clone its HFS+."""
+    dmg = Path(args.recovery)
+    if not dmg.is_file():
+        ui.err(f"BaseSystem.dmg not found: {dmg}")
+        return 1
+    target = args.device or _choose_target()
+    if not target:
+        print("Cancelled.")
+        return 1
+    try:
+        usb.assert_safe_target(target, None)
+    except usb.BuildError as e:
+        print(f"SAFETY: {e}")
+        return 1
+    if not _confirm_wipe(target, args.yes):
+        print("Cancelled.")
+        return 1
+    work = Path(args.workdir) if args.workdir else Path(
+        tempfile.mkdtemp(prefix="rec-", dir=str(_default_work_base())))
+    work.mkdir(parents=True, exist_ok=True)
+    try:
+        usb.ensure_sudo()
+        with usb.SudoKeepAlive():
+            usb.build_recovery(target, dmg, work, args.label or DEFAULT_LABEL)
+    except Exception as e:  # noqa: BLE001
+        print(f"Build failed: {e}")
+        return 1
+    print()
+    ui.ok(f"Finished. Boot {target} on the Intel Mac (hold Option) — EXPERIMENTAL.")
+    return 0
+
+
 def cmd_build(args) -> int:
     """Flag-driven build (power users)."""
     if deps.missing():
         print("Missing dependencies — run: slickstick deps")
         return 1
+    if getattr(args, "recovery", None):
+        return _execute_recovery(args)
     source_disk = usb.parent_disk(args.stick) if getattr(args, "stick", None) else None
     target = args.device or _choose_target(exclude=source_disk)
     if not target:
@@ -572,6 +608,8 @@ def build_parser() -> argparse.ArgumentParser:
     src.add_argument("--stick", help="clone an inserted installer stick's partition, e.g. /dev/sdc2 (real markers)")
     src.add_argument("--local", help="path to an existing Install app or a .pkg")
     src.add_argument("--url", help="direct InstallAssistant.pkg URL (Apple CDN)")
+    src.add_argument("--recovery", help="build an Intel recovery stick from a "
+                                        "BaseSystem.dmg (downloaded with macrecovery.py)")
     src.add_argument("--version", help="version hint for backends that support it")
     b.add_argument("--reference-stick",
                    help="advanced: copy real root markers from this stick when the app came "
