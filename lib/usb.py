@@ -272,11 +272,14 @@ def stream_app_to_target(pkg: Path, dst: Path, repo_root: Path) -> Path:
     shared = app / "Contents" / "SharedSupport"
     subprocess.run(["sudo", "mkdir", "-p", str(shared)], check=True)
 
-    # 2. SharedSupport.dmg -> target, with progress (user reads pkg, root writes)
+    # 2. SharedSupport.dmg -> target, with progress (user reads pkg, root writes).
+    # This file must be the WHOLE pkg (a "pkgdmg"), not the inner SharedSupport.dmg
+    # member — else startosinstall rejects the media with "pkgdmg is missing a
+    # footer" (proven on real hardware 2026-11-17; see payload.extract_pkg).
     dmg = shared / "SharedSupport.dmg"
-    size = payload.member_size(pkg, "SharedSupport.dmg")
+    size = pkg.stat().st_size
     cmd = ["bash", "-c",
-           f"bsdtar -xO -f {shlex.quote(str(pkg))} SharedSupport.dmg "
+           f"cat {shlex.quote(str(pkg))} "
            f"| sudo tee {shlex.quote(str(dmg))} >/dev/null"]
     rc = ui.run_with_progress(cmd, size, ui.measure_mount(str(dst)), label="dmg")
     if rc:

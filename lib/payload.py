@@ -29,11 +29,13 @@ from . import ui
 def extract_pkg(pkg: Path, dest: Path) -> Path:
     """Extract the Install app from an InstallAssistant.pkg into ``dest``.
 
-    The pkg is a xar with two relevant members: a small ``Payload`` (the app
-    skeleton, Apple **pbzx**-compressed) and a huge plain ``SharedSupport.dmg``.
-    We decode the pbzx skeleton with our stdlib decoder (no external pbzx tool)
-    and extract the dmg directly with bsdtar, then slot the dmg into the app's
-    ``Contents/SharedSupport/``. Returns the assembled app dir.
+    The pkg is itself a "pkgdmg": a xar package (members ``Payload`` — the app
+    skeleton — and ``SharedSupport.dmg``) with a UDIF/koly trailer appended. We
+    decode the ``Payload`` skeleton with our stdlib decoder (no external pbzx
+    tool), then place the **whole pkg** as the app's
+    ``Contents/SharedSupport/SharedSupport.dmg`` — that is what createinstallmedia
+    does and what startosinstall expects (see the note in the body). Returns the
+    assembled app dir.
     """
     dest.mkdir(parents=True, exist_ok=True)
     _extract_skeleton(pkg, dest)
@@ -43,25 +45,19 @@ def extract_pkg(pkg: Path, dest: Path) -> Path:
     shared = app / "Contents" / "SharedSupport"
     shared.mkdir(parents=True, exist_ok=True)
     dmg = shared / "SharedSupport.dmg"
-    size = member_size(pkg, "SharedSupport.dmg")
-    ui.info(f"extracting SharedSupport.dmg — {ui.human(size)}")
-    cmd = ["bash", "-c",
-           f"bsdtar -xO -f {shlex.quote(str(pkg))} SharedSupport.dmg "
-           f"> {shlex.quote(str(dmg))}"]
+    # The on-stick SharedSupport.dmg must be the WHOLE InstallAssistant.pkg — it
+    # is itself a "pkgdmg" (a xar package with a UDIF/koly trailer appended), not
+    # the inner SharedSupport.dmg member. startosinstall opens this file expecting
+    # the pkg and reads the real dmg's offset *inside* it ("Getting offset for dmg
+    # in pkg"); handed the bare inner member it rejects the media with "pkgdmg is
+    # missing a footer" (proven on real hardware 2026-11-17).
+    size = pkg.stat().st_size
+    ui.info(f"placing SharedSupport.dmg (full pkgdmg) — {ui.human(size)}")
+    cmd = ["bash", "-c", f"cat {shlex.quote(str(pkg))} > {shlex.quote(str(dmg))}"]
     rc = ui.run_with_progress(cmd, size, ui.measure_file(str(dmg)), label="dmg")
     if rc:
-        raise RuntimeError(f"extracting SharedSupport.dmg from {pkg.name} failed (rc={rc})")
+        raise RuntimeError(f"copying SharedSupport.dmg (pkgdmg) from {pkg.name} failed (rc={rc})")
     return app
-
-
-def member_size(pkg: Path, member: str) -> int:
-    """Uncompressed size of a xar member (from the TOC), or 0 if unknown."""
-    out = subprocess.run(["bsdtar", "-tvf", str(pkg), member],
-                         capture_output=True, text=True).stdout.split()
-    for tok in out:
-        if tok.isdigit() and int(tok) > 1_000_000:
-            return int(tok)
-    return 0
 
 
 def _extract_skeleton(pkg: Path, dest: Path) -> None:

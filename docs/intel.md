@@ -49,18 +49,48 @@ internal/cache dirs) and optionally blesses it. See `build_intel_clone`.
 Wizard: choose **Intel** → **Clone from an inserted stick** → pick the installer
 stick → target a *different* USB.
 
-## Why not build Intel straight from a downloaded pkg?
+## Building Intel media from a downloaded pkg (from scratch, no clone)
 
-Modern macOS (Big Sur and later) ships the OS inside `InstallAssistant.pkg` →
-`SharedSupport.dmg` as a sealed **MobileAsset** (a large zip under
-`com_apple_MobileAsset_MacSoftwareUpdate/`) alongside Apple's **UpdateBrain**.
-`createinstallmedia` runs Apple's own installer logic *on macOS* to turn that into
-bootable media. Reconstructing that output on Linux means dealing with sealed
-system volumes / cryptexes — substantial reverse-engineering.
+Modern macOS (Big Sur and later) ships the OS inside `InstallAssistant.pkg`. That
+pkg is a **"pkgdmg"**: a xar package (members `Payload` — the app skeleton — and
+`SharedSupport.dmg`) with a UDIF/koly trailer appended. Inside its
+`SharedSupport.dmg` the OS lives as a sealed **MobileAsset** alongside Apple's
+**UpdateBrain**, and the long-standing assumption was that reproducing
+`createinstallmedia`'s output on Linux would require running UpdateBrain / unsealing
+system volumes — i.e. a Mac.
 
-**So building Intel media from a raw *full-installer* pkg is a future research
-item, not currently supported** — cloning a stick sidesteps it. But there's a
-more promising pkg-free route below.
+**Finding — UpdateBrain is *not* required for the install (proven on a pre-T2 Intel
+Mac, 2026-11-17).** We hand-built a stick entirely on Linux:
+
+- root = a **recovery `BaseSystem`** (our proven `macrecovery` path) — boots the Mac
+- a reconstructed **Install app** (skeleton from the pkg's `Payload`)
+- the app's `Contents/SharedSupport/SharedSupport.dmg` = the **whole pkg** (see the
+  critical subtlety below), carrying the offline OS payload
+- synthesized `.IAPhysicalMedia` + bless
+
+Booted on the iMac, `startosinstall` from the on-stick app **accepted the media,
+skipped bridgeOS (pre-T2), prepared, and ran the install onto the target — no
+UpdateBrain, no clock/cert workaround.** It handed off to the second "macOS
+Installer" phase normally; only writing to a slow/failing throwaway target USB kept
+it from fully finishing (a limit of that USB, not the method). A clean end-to-end
+completion on good media is the one remaining confirmation.
+
+**The critical subtlety — `SharedSupport.dmg` must be the *whole pkg*, not the inner
+member.** On a real `createinstallmedia` stick the app's
+`Contents/SharedSupport/SharedSupport.dmg` is byte-identical to the entire
+`InstallAssistant.pkg` (it *is* the pkgdmg). The installer opens it expecting a
+*pkg* and reads the real dmg's offset *inside* it ("Getting offset for dmg in pkg");
+hand it the bare inner `SharedSupport.dmg` member and it rejects the media with
+**"pkgdmg is missing a footer."** SlickStick now places the whole pkg on both the
+copy and stream paths (`payload.extract_pkg`, `usb.stream_app_to_target`). A second
+gotcha: the reconstructed app bundle must contain no stray files (e.g. a nested copy
+of the app), or codesign fails with "unsealed contents" and the installer calls the
+media "damaged."
+
+So a **pkg-based, no-Mac, no-clone Intel full installer** is viable; it's validated
+through "installer accepted + install running," pending only a clean finish on a
+fast target. The **recovery path below** remains the simplest one-stick option when
+a reinstall (vs. an offline full install) is enough.
 
 ## A promising pkg-free path: Apple Recovery (`macrecovery.py`)
 
@@ -144,4 +174,4 @@ to reinstall and only the Safari cryptex fails to verify — the core function w
 | **End-to-end clone → boot on real Intel hardware** | ✅ **PROVEN** — a Monterey clone built on Linux booted an Intel iMac into the full installer (branded icon) |
 | **Recovery path** (`macrecovery.py` → BaseSystem → stick) | ✅ **PROVEN on hardware** — `build --recovery` built a Monterey stick on Linux that booted a real Intel iMac into Recovery (pkg-free, one stick, pure-Python UDIF decode) |
 | **Ventura+ recovery (Cryptexes)** | 🧪 structurally viable — cryptexes are plain files, no in-volume seal; boot test pending (2018 mini) |
-| full-installer pkg → Intel expansion (modern macOS) | 🔬 open future research |
+| **full-installer pkg → Intel (from scratch, no clone)** | 🧪 **validated** — a hand-built stick's `startosinstall` accepted the media & ran the install (no UpdateBrain, no cert/date trick) on a pre-T2 iMac; `SharedSupport.dmg` must be the whole **pkgdmg**; clean end-to-end finish pending a fast target disk |
