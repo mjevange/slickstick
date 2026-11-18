@@ -507,16 +507,62 @@ def _download_full_pkg(major: int, work: Path) -> Path:
     return gibmacos.GibMacOSSource(match).fetch_pkg(work)
 
 
+def _download_cache() -> Path:
+    """Stable location for reusable downloads (BaseSystem.dmg, InstallAssistant.pkg),
+    separate from the per-run (ephemeral) build scratch."""
+    base = _default_work_base() / "downloads"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def _cached_download(key: str, fetch, min_bytes: int, scratch: Path,
+                     no_cache: bool) -> Path:
+    """Reuse a previously downloaded file, or fetch it and cache it for next time.
+
+    A multi-GB download should be a one-time cost per version, resilient to any
+    later failure in the build — a hiccup must never force re-pulling ~12 GB. We
+    key the cached file by version/board (``key``) and reuse it when a complete
+    copy is already present. ``fetch(dir)`` downloads into ``dir`` and returns the
+    produced file; we promote it to the cache by an atomic rename *only after it
+    returns successfully*, so a partial/interrupted download never lands under the
+    final name and can't be wrongly reused (``min_bytes`` is a cheap truncation
+    guard on top). ``no_cache`` bypasses the cache: the file is fetched straight
+    into ``scratch`` (the ephemeral build dir) and never persisted.
+    """
+    if no_cache:
+        return fetch(scratch)
+    cache = _download_cache()
+    final = cache / key
+    if final.is_file() and final.stat().st_size >= min_bytes:
+        ui.ok(f"reusing cached {final.name} ({ui.human(final.stat().st_size)}) "
+              f"— skipping download")
+        return final
+    tmp = Path(tempfile.mkdtemp(prefix="dl-", dir=str(cache)))
+    try:
+        produced = fetch(tmp)
+        size = produced.stat().st_size
+        if size < min_bytes:
+            raise RuntimeError(f"{produced.name} looks truncated ({size} bytes) — "
+                               f"not caching it")
+        final.unlink(missing_ok=True)
+        os.replace(produced, final)   # same filesystem (tmp is under cache) → rename
+        return final
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def _run_intel_full(target: str, label: str, yes: bool, dmg: Path | None = None,
                     pkg: Path | None = None, board: str | None = None,
                     os_type: str = "default", pkg_major: int | None = None,
-                    workdir: str | None = None) -> int:
+                    workdir: str | None = None, no_cache: bool = False) -> int:
     """Safety-check, (download,) confirm, build, and unmount a from-scratch Intel
     full *offline* installer (recovery BaseSystem + pkg; no Mac, no clone).
 
     Supply ``dmg``/``pkg`` as files, or ``board``/``os_type``/``pkg_major`` to
-    download both. Downloads run before the wipe confirm, so a bad download fails
-    before anything is erased."""
+    download both. Downloaded files are cached under ~/.cache/slickstick/downloads
+    and reused on later runs (so a build failure never forces re-pulling ~12 GB);
+    ``no_cache`` disables that. Downloads run after the wipe confirm but before
+    anything is erased, so a bad download fails before the target is touched."""
     try:
         usb.assert_safe_target(target, None)
     except usb.BuildError as e:
@@ -525,6 +571,9 @@ def _run_intel_full(target: str, label: str, yes: bool, dmg: Path | None = None,
     work = Path(workdir) if workdir else Path(
         tempfile.mkdtemp(prefix="intelfull-", dir=str(_default_work_base())))
     work.mkdir(parents=True, exist_ok=True)
+    # Caching is on by default (a build hiccup shouldn't re-pull ~12 GB); set
+    # SLICKSTICK_NO_CACHE=1 to opt out (downloads go to scratch, nothing persists).
+    no_cache = no_cache or (os.environ.get("SLICKSTICK_NO_CACHE", "") not in ("", "0"))
     # Confirm the wipe BEFORE downloading: a mistyped confirmation must never cost
     # a multi-GB re-download, and the download shouldn't start until you've
     # committed to a target. Nothing is erased until the build step below.
@@ -533,9 +582,15 @@ def _run_intel_full(target: str, label: str, yes: bool, dmg: Path | None = None,
         return 1
     try:
         if dmg is None:
-            dmg = recovery.download_recovery(board, os_type, work)
+            dmg = _cached_download(
+                f"BaseSystem-{board or 'generic'}-{os_type}.dmg",
+                lambda d: recovery.download_recovery(board, os_type, d),
+                100_000_000, work, no_cache)
         if pkg is None:
-            pkg = _download_full_pkg(pkg_major, work)
+            pkg = _cached_download(
+                f"InstallAssistant-macos{pkg_major}.pkg",
+                lambda d: _download_full_pkg(pkg_major, d),
+                1_000_000_000, work, no_cache)
     except Exception as e:  # noqa: BLE001
         print(f"Download failed: {e}")
         return 1
