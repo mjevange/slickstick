@@ -45,7 +45,9 @@ Byte-validated against a real `createinstallmedia` stick. No `bless`,
 
 Intel needs a **bootable HFS+ volume** — `boot.efi` at the conventional path, plus
 a `SharedSupport.dmg` payload if you want an offline install. SlickStick has three
-Intel build modes:
+Intel build modes (plus a no-USB **download-only** path — wizard "Download macOS
+files only" or `slickstick download` — that just fetches the raw pkg/BaseSystem into
+a folder you choose, to archive, inspect, or feed the "provide the files" build later):
 
 1. **Clone** an existing `createinstallmedia` stick (`stick` source /
    `build_intel_clone`): copies the whole tree (skipping HFS+ internal/cache dirs)
@@ -90,9 +92,10 @@ Mac, 2026-11-17).** We hand-built a stick entirely on Linux:
 Booted on the iMac, `startosinstall` from the on-stick app **accepted the media,
 skipped bridgeOS (pre-T2), prepared, and ran the install onto the target — no
 UpdateBrain, no clock/cert workaround.** It handed off to the second "macOS
-Installer" phase normally; only writing to a slow/failing throwaway target USB kept
-it from fully finishing (a limit of that USB, not the method). A clean end-to-end
-completion on good media is the one remaining confirmation.
+Installer" phase normally. The first attempt was limited only by a slow/failing
+throwaway target USB; on a healthy 3 TB disk (2026-11-18) the install **ran to
+completion and the installed macOS booted to Setup Assistant** — the full chain is
+confirmed.
 
 **The critical subtlety — `SharedSupport.dmg` must be the *whole pkg*, not the inner
 member.** On a real `createinstallmedia` stick the app's
