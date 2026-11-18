@@ -69,6 +69,10 @@ def _sudo_exists(path: Path) -> bool:
     return subprocess.run(["sudo", "test", "-e", str(path)]).returncode == 0
 
 
+def _sudo_is_symlink(path: Path) -> bool:
+    return subprocess.run(["sudo", "test", "-L", str(path)]).returncode == 0
+
+
 def _read_bless(part_path: str) -> list[int] | None:
     """Read the 8 finderInfo CNIDs from the HFS+ volume header (offset 1024+80),
     via sudo so it works without running the whole tool as root."""
@@ -123,7 +127,7 @@ def cmd_verify(args) -> int:
     line(af00, "GPT partition type is Apple HFS+ (AF00)")
     line(hfs, "filesystem is HFS+")
 
-    iaphys_ok = appname_ok = restore_ok = boot_ok = icon_ok = False
+    iaphys_ok = appname_ok = restore_ok = boot_ok = icon_ok = icon_dangling = False
     appname = None
     usb.unmount_if_mounted(part_path)
     mp = Path(tempfile.mkdtemp(prefix="ssverify-"))
@@ -145,7 +149,11 @@ def cmd_verify(args) -> int:
         appname_ok = bool(appname) and _sudo_exists(mp / appname)
         restore_ok = _sudo_exists(mp / "restore")
         boot_ok = _sudo_exists(mp / "System/Library/CoreServices/boot.efi")
+        # test -e follows the link, so icon_ok is true only when it RESOLVES to a
+        # real file. A recovery BaseSystem ships .VolumeIcon.icns as a *dangling*
+        # symlink; flag that case so a broken icon isn't silently read as "absent".
         icon_ok = _sudo_exists(mp / ".VolumeIcon.icns")
+        icon_dangling = (not icon_ok) and _sudo_is_symlink(mp / ".VolumeIcon.icns")
     except subprocess.CalledProcessError:
         ui.warn("could not mount the HFS+ volume to inspect its contents")
     finally:
@@ -175,7 +183,11 @@ def cmd_verify(args) -> int:
               f"{ui.DIM}(optional; pre-T2 Macs don't need it){ui.RESET}")
 
     print(f"\n  {ui.BOLD}Cosmetic{ui.RESET}")
-    line(icon_ok, ".VolumeIcon.icns present (branded startup icon)")
+    if icon_dangling:
+        print(f"  {ui.YELLOW}!{ui.RESET} .VolumeIcon.icns is a dangling symlink "
+              f"{ui.DIM}(broken — the volume will show a generic icon){ui.RESET}")
+    else:
+        line(icon_ok, ".VolumeIcon.icns present (branded startup icon)")
 
     as_ready = af00 and hfs and iaphys_ok and appname_ok
     intel_ready = af00 and hfs and boot_ok
