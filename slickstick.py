@@ -223,11 +223,20 @@ def _confirm_wipe(target: str, assume_yes: bool) -> bool:
     subprocess.run(["lsblk", "-o", "NAME,SIZE,TYPE,LABEL,FSTYPE,MOUNTPOINT", target])
     if assume_yes:
         return True
-    try:
-        ans = input(f"\nType the device name '{Path(target).name}' to confirm wipe: ").strip()
-    except EOFError:
-        return False
-    return ans == Path(target).name
+    name = Path(target).name
+    # Re-prompt on a mistype rather than cancelling outright — a wrong keystroke
+    # here must not throw away a long download or force starting the wizard over.
+    while True:
+        try:
+            ans = input(f"\nType the device name '{name}' to confirm wipe "
+                        "(or press Enter to cancel): ").strip()
+        except EOFError:
+            return False
+        if not ans:
+            return False
+        if ans == name:
+            return True
+        ui.warn(f"That didn't match '{name}'. Try again, or press Enter to cancel.")
 
 
 def _default_work_base() -> Path:
@@ -504,6 +513,12 @@ def _run_intel_full(target: str, label: str, yes: bool, dmg: Path | None = None,
     work = Path(workdir) if workdir else Path(
         tempfile.mkdtemp(prefix="intelfull-", dir=str(_default_work_base())))
     work.mkdir(parents=True, exist_ok=True)
+    # Confirm the wipe BEFORE downloading: a mistyped confirmation must never cost
+    # a multi-GB re-download, and the download shouldn't start until you've
+    # committed to a target. Nothing is erased until the build step below.
+    if not _confirm_wipe(target, yes):
+        print("Cancelled.")
+        return 1
     try:
         if dmg is None:
             dmg = recovery.download_recovery(board, os_type, work)
@@ -511,9 +526,6 @@ def _run_intel_full(target: str, label: str, yes: bool, dmg: Path | None = None,
             pkg = _download_full_pkg(pkg_major, work)
     except Exception as e:  # noqa: BLE001
         print(f"Download failed: {e}")
-        return 1
-    if not _confirm_wipe(target, yes):
-        print("Cancelled.")
         return 1
     try:
         usb.ensure_sudo()
