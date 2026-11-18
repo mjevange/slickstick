@@ -966,6 +966,97 @@ def _wizard_intel_full_local() -> dict:
             "dmg": str(dmg), "pkg": str(pkg)}
 
 
+def _run_download_only(dest: Path, want_pkg: bool, want_recovery: bool,
+                       major: int | None, board: str | None,
+                       os_type: str = "default") -> int:
+    """Download the raw macOS files into a folder the user picks — no USB, no build.
+
+    The files can later feed the "provide the files" build path, or be archived,
+    inspected, or used on another machine. Unlike the build cache (hidden plumbing),
+    these land where the user asked and are theirs to keep."""
+    dest = dest.expanduser()
+    try:
+        dest.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        ui.err(f"can't use {dest}: {e}")
+        return 1
+    got: list[Path] = []
+    try:
+        if want_recovery:
+            got.append(Path(recovery.download_recovery(board, os_type, dest)))
+        if want_pkg:
+            got.append(Path(_download_full_pkg(major, dest)))
+    except Exception as e:  # noqa: BLE001
+        print(f"Download failed: {e}")
+        return 1
+    print()
+    ui.ok("Downloaded:")
+    for p in got:
+        try:
+            size = f"  ({ui.human(p.stat().st_size)})"
+        except OSError:
+            size = ""
+        print(f"  {p}{size}")
+    print('\n  Build a stick from these later with "provide the files"')
+    print("  (wizard: Intel → Full offline installer → I'll provide the files;")
+    print("   or: build --recovery <BaseSystem.dmg> --local <pkg>).")
+    return 0
+
+
+def _wizard_download_only() -> dict:
+    """Pick which macOS files + a version + a destination; download, no USB."""
+    print("\n  Downloads the raw macOS files (no USB, no build) into a folder you")
+    print("  choose — to archive, inspect, build on another machine, or make a stick")
+    print('  later via the "provide the files" option.')
+    which = _menu([
+        "Full installer pkg (InstallAssistant.pkg)",
+        "Recovery image (BaseSystem.dmg)",
+        "Both",
+    ], "  Which files")
+    want_pkg = which in (0, 2)
+    want_recovery = which in (1, 2)
+    ui.heading("\nWhich macOS version?")
+    print("  Monterey is hardware-verified; Ventura+ use Cryptexes we couldn't test.")
+    opts = [f'{v["name"]} — {v["note"]}' for v in recovery.RECOVERY_VERSIONS]
+    v = recovery.RECOVERY_VERSIONS[_menu(opts, "  Version")]
+    major = int(re.search(r"\((\d+)\)", v["name"]).group(1))
+    raw = _input_path("\n  Download to which folder "
+                      "(Tab to complete, Enter = current dir): ").strip()
+    dest = Path(raw) if raw else Path.cwd()
+    return {"_download_only": True, "dest": str(dest), "want_pkg": want_pkg,
+            "want_recovery": want_recovery, "major": major,
+            "board": v["board"], "os_type": v["os"]}
+
+
+def cmd_download(args) -> int:
+    """CLI: download the raw macOS files only (no USB). Pick a version by name/major
+    against the known recovery versions; defaults to the full-installer pkg."""
+    want_pkg = args.pkg or not args.recovery
+    want_recovery = args.recovery
+    key = (args.version or "").strip().lower()
+    match = None
+    for v in recovery.RECOVERY_VERSIONS:
+        mj = re.search(r"\((\d+)\)", v["name"]).group(1)
+        if key and (key in v["name"].lower() or key == mj):
+            match = v
+            break
+    if key and match is None:
+        ui.err(f"unknown version '{args.version}'. Known: "
+               + ", ".join(v["name"] for v in recovery.RECOVERY_VERSIONS))
+        return 1
+    if match is None:
+        if want_recovery:
+            ui.err("--recovery needs --version (a recovery image is board-specific). "
+                   "Known: " + ", ".join(v["name"] for v in recovery.RECOVERY_VERSIONS))
+            return 1
+        match = recovery.RECOVERY_VERSIONS[-2]  # Monterey — the verified default
+        ui.info(f"no --version given; defaulting to {match['name']}.")
+    major = int(re.search(r"\((\d+)\)", match["name"]).group(1))
+    dest = Path(args.output) if args.output else Path.cwd()
+    return _run_download_only(dest, want_pkg, want_recovery, major,
+                              match["board"], match["os"])
+
+
 def cmd_wizard(args) -> int:
     """Guided, menu-driven build — the default when no subcommand is given."""
     ui.banner()
@@ -979,12 +1070,22 @@ def cmd_wizard(args) -> int:
 
     try:
         action = _menu(["Build a bootable macOS installer USB",
+                        "Download macOS files only (no USB)",
                         "Check an existing stick (verify — read-only)"],
                        "What would you like to do?")
     except (_Cancelled, _StartOver, KeyboardInterrupt):
         print("\nCancelled.")
         return 1
     if action == 1:
+        try:
+            plan = _wizard_download_only()
+        except (_Cancelled, _StartOver, KeyboardInterrupt):
+            print("\nCancelled.")
+            return 1
+        return _run_download_only(Path(plan["dest"]), plan["want_pkg"],
+                                  plan["want_recovery"], plan.get("major"),
+                                  plan.get("board"), plan.get("os_type", "default"))
+    if action == 2:
         return _wizard_verify()
 
     while True:
@@ -1179,6 +1280,17 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--workdir", help="where to download/extract (default: ~/.cache/slickstick)")
     b.add_argument("-y", "--yes", action="store_true", help="skip the typed wipe confirmation")
     b.set_defaults(func=cmd_build)
+
+    dl = sub.add_parser("download", help="download the raw macOS files only (no USB)")
+    dl.add_argument("--pkg", action="store_true",
+                    help="download the full-installer InstallAssistant.pkg (default)")
+    dl.add_argument("--recovery", action="store_true",
+                    help="download the recovery BaseSystem.dmg (needs --version)")
+    dl.add_argument("--version",
+                    help="macOS version by name or major, e.g. 'monterey' or '12' "
+                         "(required for --recovery; defaults to Monterey for --pkg)")
+    dl.add_argument("-o", "--output", help="destination folder (default: current dir)")
+    dl.set_defaults(func=cmd_download)
     return p
 
 
