@@ -389,6 +389,7 @@ def _execute_build(target: str, source, arch: str, reference_stick: str | None,
     print(f"\nSource: {source.id} — {source.desc}")
     own_reference = False
     reference_root = None
+    build_ok = False
     try:
         with usb.SudoKeepAlive():
             if streaming:
@@ -421,6 +422,7 @@ def _execute_build(target: str, source, arch: str, reference_stick: str | None,
                 else:
                     usb.build(target, app, work, lbl, journaled=journaled,
                               reference_root=reference_root, build_version=build_version)
+        build_ok = True
     except usb.BuildError as e:
         print(f"Build failed: {e}")
         return 1
@@ -431,9 +433,12 @@ def _execute_build(target: str, source, arch: str, reference_stick: str | None,
         if own_reference and reference_root is not None:
             _umount_reference(reference_root)
         source.cleanup()
-        # "stream" means keep nothing — drop our temp work dir (and any pkg we
-        # downloaded into it). "copy" keeps it (that's the whole point).
-        if created_work and streaming:
+        # "stream" means keep nothing — drop our temp work dir (and the pkg we
+        # downloaded into it), but only on SUCCESS. On a failed build we keep it
+        # so a retry can reuse the already-downloaded pkg instead of re-pulling
+        # ~17 GB (nobody should re-download after a hiccup). "copy" keeps it
+        # either way (that's the whole point).
+        if created_work and streaming and build_ok:
             shutil.rmtree(work, ignore_errors=True)
 
     print()
