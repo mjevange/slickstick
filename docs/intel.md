@@ -40,14 +40,23 @@ Byte-validated against a real `createinstallmedia` stick. No `bless`,
 
 ## How SlickStick builds Intel media
 
-Intel needs the **full expanded `createinstallmedia` tree** on the HFS+ volume
-(`boot.efi`, `BaseSystem/`, `System/`, `Firmware/`, the installer app) — not just
-the app. SlickStick produces this by **cloning an existing `createinstallmedia`
-stick** (the `stick` source): it copies the whole tree (skipping HFS+
-internal/cache dirs) and optionally blesses it. See `build_intel_clone`.
+Intel needs a **bootable HFS+ volume** — `boot.efi` at the conventional path, plus
+a `SharedSupport.dmg` payload if you want an offline install. SlickStick has three
+Intel build modes:
 
-Wizard: choose **Intel** → **Clone from an inserted stick** → pick the installer
-stick → target a *different* USB.
+1. **Clone** an existing `createinstallmedia` stick (`stick` source /
+   `build_intel_clone`): copies the whole tree (skipping HFS+ internal/cache dirs)
+   and optionally blesses it. Needs a stick someone already made on a Mac.
+   Wizard: **Intel → Clone from an inserted stick**.
+2. **Recovery** (`--recovery BaseSystem.dmg` / `build_recovery`): a one-stick,
+   pkg-free *reinstall* stick from an Apple recovery image. Boots → downloads &
+   installs over the internet. Wizard: **Intel → Download macOS Recovery**.
+3. **Full installer from scratch** (`--recovery BaseSystem.dmg --local <pkg>` /
+   `build_intel_full`): combines a recovery `BaseSystem.dmg` (bootable root) with an
+   `InstallAssistant.pkg` (app + whole-pkgdmg `SharedSupport.dmg`) into a one-stick
+   **offline** full installer — no Mac, no clone. Wizard: **Intel → Full offline
+   installer from a BaseSystem.dmg + a .pkg**. See the next section for the finding
+   behind it; experimental pending a clean end-to-end hardware finish.
 
 ## Building Intel media from a downloaded pkg (from scratch, no clone)
 

@@ -474,12 +474,65 @@ def _execute_recovery(args) -> int:
                          dmg=dmg, workdir=args.workdir)
 
 
+def _run_intel_full(target: str, label: str, yes: bool, dmg: Path, pkg: Path,
+                    workdir: str | None = None) -> int:
+    """Safety-check, confirm, build, and unmount a from-scratch Intel full
+    *offline* installer (recovery BaseSystem + pkg; no Mac, no clone)."""
+    try:
+        usb.assert_safe_target(target, None)
+    except usb.BuildError as e:
+        print(f"SAFETY: {e}")
+        return 1
+    work = Path(workdir) if workdir else Path(
+        tempfile.mkdtemp(prefix="intelfull-", dir=str(_default_work_base())))
+    work.mkdir(parents=True, exist_ok=True)
+    if not _confirm_wipe(target, yes):
+        print("Cancelled.")
+        return 1
+    try:
+        usb.ensure_sudo()
+        with usb.SudoKeepAlive():
+            usb.build_intel_full(target, dmg, pkg, work, label)
+            usb.unmount_disk(target)
+    except Exception as e:  # noqa: BLE001
+        print(f"Build failed: {e}")
+        return 1
+    print()
+    ui.ok(f"Finished — {target} is unmounted and safe to unplug.")
+    print("  Boot it on the Intel Mac (hold Option); it lands in Recovery/Utilities.")
+    print("  Open Utilities ▸ Terminal and install offline onto a target volume:")
+    print('    "/Volumes/<installer>/Install macOS *.app/Contents/Resources/'
+          'startosinstall" --agreetolicense --volume /Volumes/<target>')
+    return 0
+
+
+def _execute_intel_full(args) -> int:
+    """CLI: build a from-scratch Intel full installer from a BaseSystem.dmg plus
+    an InstallAssistant.pkg (triggered by --recovery together with --local)."""
+    dmg = Path(args.recovery)
+    pkg = Path(args.local)
+    if not dmg.is_file():
+        ui.err(f"BaseSystem.dmg not found: {dmg}")
+        return 1
+    if pkg.suffix != ".pkg" or not pkg.is_file():
+        ui.err("a full-installer build needs --local to be an InstallAssistant.pkg")
+        return 1
+    label = args.label or (payload.pkg_app_name(pkg) or DEFAULT_LABEL)
+    target = args.device or _choose_target()
+    if not target:
+        print("Cancelled.")
+        return 1
+    return _run_intel_full(target, label, args.yes, dmg, pkg, workdir=args.workdir)
+
+
 def cmd_build(args) -> int:
     """Flag-driven build (power users)."""
     if deps.missing():
         print("Missing dependencies — run: slickstick deps")
         return 1
     if getattr(args, "recovery", None):
+        if getattr(args, "local", None):
+            return _execute_intel_full(args)
         return _execute_recovery(args)
     source_disk = usb.parent_disk(args.stick) if getattr(args, "stick", None) else None
     target = args.device or _choose_target(exclude=source_disk)
@@ -631,12 +684,16 @@ def _prompt_label(default: str, hint: str) -> str:
 def _wizard_intel() -> dict:
     """Intel build flow: Apple Recovery download (proven) or clone a stick."""
     ui.heading("\nHow should SlickStick build the Intel stick?")
-    if _menu([
+    choice = _menu([
         "Download macOS Recovery from Apple (proven — boots real Intel Macs, 1 stick)",
         "Clone an inserted createinstallmedia stick (full offline installer, experimental)",
-    ]) == 0:
+        "Full offline installer from a BaseSystem.dmg + a .pkg (no Mac, no clone — experimental)",
+    ])
+    if choice == 0:
         return _wizard_intel_recovery()
-    return _wizard_intel_clone()
+    if choice == 1:
+        return _wizard_intel_clone()
+    return _wizard_intel_full()
 
 
 def _wizard_intel_recovery() -> dict:
@@ -693,6 +750,36 @@ def _wizard_intel_clone() -> dict:
             "strategy": "copy"}
 
 
+def _wizard_intel_full() -> dict:
+    """From-scratch Intel full OFFLINE installer: a recovery BaseSystem.dmg
+    (bootable root) + an InstallAssistant.pkg (the offline payload). No Mac, no
+    clone source."""
+    print("\n  Builds a one-stick Intel FULL OFFLINE installer from two files, with")
+    print("  no Mac and no clone source:")
+    print("    • a recovery BaseSystem.dmg   (download it with macrecovery.py)")
+    print("    • an InstallAssistant.pkg     (the matching macOS full installer)")
+    print("  Use the SAME macOS version for both.")
+    print(f"  {ui.DIM}Experimental: on a pre-T2 iMac startosinstall accepted the media")
+    print(f"  and ran the install; a clean install-to-desktop finish is still being"
+          f" confirmed.{ui.RESET}")
+    dmg = Path(_input_path("\n  Path to the BaseSystem.dmg (Tab to complete): "))
+    if not dmg.is_file():
+        ui.warn(f"Not a file: {dmg}")
+        raise _StartOver
+    pkg = Path(_input_path("  Path to the InstallAssistant.pkg (Tab to complete): "))
+    if pkg.suffix != ".pkg" or not pkg.is_file():
+        ui.warn("That must be an InstallAssistant.pkg.")
+        raise _StartOver
+    label = _prompt_label(payload.pkg_app_name(pkg) or DEFAULT_LABEL,
+                          "Enter for the default")
+    ui.heading("\nNow pick the TARGET USB to erase.")
+    target = _choose_target(allow_nav=True)
+    if not target:
+        raise _Cancelled
+    return {"_intel_full": True, "target": target, "label": label,
+            "dmg": str(dmg), "pkg": str(pkg)}
+
+
 def cmd_wizard(args) -> int:
     """Guided, menu-driven build — the default when no subcommand is given."""
     ui.banner()
@@ -723,6 +810,9 @@ def cmd_wizard(args) -> int:
         except (_Cancelled, KeyboardInterrupt):
             print("\nCancelled.")
             return 1
+        if plan.pop("_intel_full", False):
+            return _run_intel_full(plan["target"], plan["label"], yes=False,
+                                   dmg=Path(plan["dmg"]), pkg=Path(plan["pkg"]))
         if plan.pop("_recovery", False):
             return _run_recovery(plan["target"], plan["label"], yes=False,
                                  board=plan["board"], os_type=plan["os_type"])
@@ -884,8 +974,9 @@ def build_parser() -> argparse.ArgumentParser:
     src.add_argument("--stick", help="clone an inserted installer stick's partition, e.g. /dev/sdc2 (real markers)")
     src.add_argument("--local", help="path to an existing Install app or a .pkg")
     src.add_argument("--url", help="direct InstallAssistant.pkg URL (Apple CDN)")
-    src.add_argument("--recovery", help="build an Intel recovery stick from a "
-                                        "BaseSystem.dmg (downloaded with macrecovery.py)")
+    src.add_argument("--recovery", help="Intel: a BaseSystem.dmg (from macrecovery.py). "
+                                        "Alone → a recovery stick; together with --local <pkg> "
+                                        "→ a from-scratch full offline installer (no Mac, no clone)")
     src.add_argument("--version", help="version hint for backends that support it")
     b.add_argument("--reference-stick",
                    help="advanced: copy real root markers from this stick when the app came "

@@ -507,3 +507,80 @@ def build_recovery(target: str, basesystem_dmg: Path, work: Path, hfs_label: str
     else:
         ui.warn("fsck reported issues — inspect before use.")
     raw.unlink(missing_ok=True)
+
+
+def build_intel_full(target: str, basesystem_dmg: Path, pkg: Path,
+                     work: Path, hfs_label: str) -> None:
+    """Build a no-Mac, no-clone Intel *full offline installer* stick.
+
+    Combines two Apple-served inputs, entirely on Linux:
+      - a recovery ``BaseSystem.dmg`` (``macrecovery.py``) — the bootable root; it
+        carries ``boot.efi`` at the conventional path and boots a real Intel Mac
+      - an ``InstallAssistant.pkg`` — the Install app skeleton plus the **whole
+        pkg** placed as ``Contents/SharedSupport/SharedSupport.dmg`` (the "pkgdmg"
+        the installer expects), i.e. the offline OS payload
+
+    The booted recovery's ``startosinstall`` then installs macOS offline from that
+    SharedSupport — no UpdateBrain, no network. Validated on a pre-T2 Intel iMac
+    (2026-11-17: startosinstall accepted the media and ran the install); a clean
+    install-to-desktop finish is still being confirmed, so this path is
+    EXPERIMENTAL. See docs/intel.md.
+    """
+    from . import bless, udif
+    repo_root = Path(__file__).resolve().parent.parent
+
+    raw = work / "basesystem.img"
+    src = work / "src_ro"
+    src.mkdir(parents=True, exist_ok=True)
+    ui.step(1, 6, "Decoding BaseSystem.dmg -> raw image")
+    udif.decode(str(basesystem_dmg), str(raw))
+
+    ui.step(2, 6, "Mounting the recovery filesystem")
+    loop = subprocess.run(["sudo", "losetup", "-fP", "--show", str(raw)],
+                          capture_output=True, text=True, check=True).stdout.strip()
+    hfs_src = _hfs_partition_of(loop)
+    subprocess.run(["sudo", "mount", "-o", "ro", "-t", "hfsplus", hfs_src, str(src)], check=True)
+    try:
+        ui.step(3, 6, "Partitioning + formatting the USB (GPT: ESP + Apple HFS+)")
+        esp, hfs = partition(target, hfs_label)
+        format_parts(esp, hfs, hfs_label, journaled=False)
+
+        dst = work / "dst_rw"
+        unmount_if_mounted(hfs)
+        _mount(hfs, dst, ro=False)
+        bless_targets = None
+        try:
+            ui.step(4, 6, "Copying the bootable recovery system onto the USB")
+            excl = " ".join(f"--exclude {shlex.quote('./' + e)}" for e in _HFS_INTERNAL)
+            _run(["bash", "-c",
+                  f"cd {shlex.quote(str(src))} && "
+                  f"sudo bsdtar -cf - {excl} . | sudo bsdtar -xpf - -C {shlex.quote(str(dst))}"])
+            subprocess.run(["sudo", "sync"])
+
+            ui.step(5, 6, "Overlaying the Install app + SharedSupport payload (~12 GB)")
+            app = stream_app_to_target(pkg, dst, repo_root)
+            payload.write_markers_from_app(app, dst, payload.pkg_build_version(pkg))
+            ui.ok("synthesized root markers (.IAPhysicalMedia + icon)")
+            subprocess.run(["sudo", "sync"])
+
+            boot_efi = dst / "System" / "Library" / "CoreServices" / "boot.efi"
+            if boot_efi.exists():
+                bless_targets = (bless.cnid(boot_efi.parent), bless.cnid(boot_efi))
+            else:
+                ui.warn("no boot.efi in the recovery — unexpected for a BaseSystem")
+        finally:
+            _umount(dst)
+        if bless_targets:
+            f_cnid, b_cnid = bless_targets
+            bless.patch_finderinfo(hfs, {0: f_cnid, 1: b_cnid, 5: f_cnid})
+            ui.ok(f"blessed boot.efi (optional T2 insurance): folder={f_cnid} file={b_cnid}")
+    finally:
+        subprocess.run(["sudo", "umount", str(src)])
+        subprocess.run(["sudo", "losetup", "-d", loop])
+
+    ui.step(6, 6, "Verifying")
+    if verify(hfs):
+        ui.ok("Volume verified.")
+    else:
+        ui.warn("fsck reported issues — inspect before use.")
+    raw.unlink(missing_ok=True)
