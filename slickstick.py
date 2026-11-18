@@ -160,7 +160,11 @@ def cmd_verify(args) -> int:
     line(iaphys_ok, ".IAPhysicalMedia has AppName + ProductVersion + ProductBuildVersion")
     line(appname_ok, f"AppName resolves to {appname}" if appname
          else "AppName resolves to a real Install macOS *.app")
-    line(restore_ok, "restore/ present")
+    if restore_ok:
+        line(True, "restore/ present (legacy marker, optional)")
+    else:
+        print(f"  {ui.DIM}·{ui.RESET} restore/ absent "
+              f"{ui.DIM}(optional — not required for recognition){ui.RESET}")
 
     print(f"\n  {ui.BOLD}Intel boot{ui.RESET}")
     line(boot_ok, "System/Library/CoreServices/boot.efi present")
@@ -184,7 +188,7 @@ def cmd_verify(args) -> int:
         ui.ok("Intel: boot layout present (boot.efi)")
     else:
         ui.info("Intel: no boot.efi boot layout")
-    if iaphys_ok and appname_ok and restore_ok:
+    if iaphys_ok and appname_ok:
         ui.ok("Clone source: usable — real installer markers present")
     if not (as_ready or intel_ready):
         ui.err("This stick won't boot as a macOS installer.")
