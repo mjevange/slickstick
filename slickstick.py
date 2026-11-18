@@ -474,10 +474,28 @@ def _execute_recovery(args) -> int:
                          dmg=dmg, workdir=args.workdir)
 
 
-def _run_intel_full(target: str, label: str, yes: bool, dmg: Path, pkg: Path,
+def _download_full_pkg(major: int, work: Path) -> Path:
+    """Download the newest full-installer pkg for a macOS major version (via
+    gibMacOS), so it matches the recovery BaseSystem of the same version."""
+    items = gibmacos.list_products("intel")
+    match = next((p for p in items
+                  if re.match(r"(\d+)", p.get("version", "") or "")
+                  and int(re.match(r"(\d+)", p["version"]).group(1)) == major), None)
+    if not match:
+        raise RuntimeError(f"no macOS {major} full installer found in Apple's catalog")
+    return gibmacos.GibMacOSSource(match).fetch_pkg(work)
+
+
+def _run_intel_full(target: str, label: str, yes: bool, dmg: Path | None = None,
+                    pkg: Path | None = None, board: str | None = None,
+                    os_type: str = "default", pkg_major: int | None = None,
                     workdir: str | None = None) -> int:
-    """Safety-check, confirm, build, and unmount a from-scratch Intel full
-    *offline* installer (recovery BaseSystem + pkg; no Mac, no clone)."""
+    """Safety-check, (download,) confirm, build, and unmount a from-scratch Intel
+    full *offline* installer (recovery BaseSystem + pkg; no Mac, no clone).
+
+    Supply ``dmg``/``pkg`` as files, or ``board``/``os_type``/``pkg_major`` to
+    download both. Downloads run before the wipe confirm, so a bad download fails
+    before anything is erased."""
     try:
         usb.assert_safe_target(target, None)
     except usb.BuildError as e:
@@ -486,13 +504,21 @@ def _run_intel_full(target: str, label: str, yes: bool, dmg: Path, pkg: Path,
     work = Path(workdir) if workdir else Path(
         tempfile.mkdtemp(prefix="intelfull-", dir=str(_default_work_base())))
     work.mkdir(parents=True, exist_ok=True)
+    try:
+        if dmg is None:
+            dmg = recovery.download_recovery(board, os_type, work)
+        if pkg is None:
+            pkg = _download_full_pkg(pkg_major, work)
+    except Exception as e:  # noqa: BLE001
+        print(f"Download failed: {e}")
+        return 1
     if not _confirm_wipe(target, yes):
         print("Cancelled.")
         return 1
     try:
         usb.ensure_sudo()
         with usb.SudoKeepAlive():
-            usb.build_intel_full(target, dmg, pkg, work, label)
+            usb.build_intel_full(target, Path(dmg), Path(pkg), work, label)
             usb.unmount_disk(target)
     except Exception as e:  # noqa: BLE001
         print(f"Build failed: {e}")
@@ -753,15 +779,44 @@ def _wizard_intel_clone() -> dict:
 def _wizard_intel_full() -> dict:
     """From-scratch Intel full OFFLINE installer: a recovery BaseSystem.dmg
     (bootable root) + an InstallAssistant.pkg (the offline payload). No Mac, no
-    clone source."""
-    print("\n  Builds a one-stick Intel FULL OFFLINE installer from two files, with")
-    print("  no Mac and no clone source:")
-    print("    • a recovery BaseSystem.dmg   (download it with macrecovery.py)")
-    print("    • an InstallAssistant.pkg     (the matching macOS full installer)")
-    print("  Use the SAME macOS version for both.")
+    clone source. Both files can be downloaded, or supplied as paths."""
+    print("\n  Builds a one-stick Intel FULL OFFLINE installer — no Mac, no clone —")
+    print("  from a recovery BaseSystem (bootable root) + a full-installer pkg")
+    print("  (the offline payload).")
     print(f"  {ui.DIM}Experimental: on a pre-T2 iMac startosinstall accepted the media")
     print(f"  and ran the install; a clean install-to-desktop finish is still being"
           f" confirmed.{ui.RESET}")
+    if _menu([
+        "Download both for me (just pick a macOS version)",
+        "I'll provide the files (BaseSystem.dmg + .pkg paths)",
+    ]) == 0:
+        return _wizard_intel_full_download()
+    return _wizard_intel_full_local()
+
+
+def _wizard_intel_full_download() -> dict:
+    """Pick one macOS version; download the matching BaseSystem + pkg, then build.
+    No board-id typing — the version maps to a board-id behind the scenes."""
+    ui.heading("\nWhich macOS version? (must boot your target Intel Mac)")
+    print("  Monterey is hardware-verified; Ventura+ use Cryptexes we couldn't test.")
+    opts = [f'{v["name"]} — {v["note"]}' for v in recovery.RECOVERY_VERSIONS]
+    sel = _menu(opts, "  Version")
+    v = recovery.RECOVERY_VERSIONS[sel]
+    major = int(re.search(r"\((\d+)\)", v["name"]).group(1))
+    name = v["name"].split(" (")[0]
+    label = _prompt_label(f"Install macOS {name}", "Enter for the default")
+    ui.heading("\nNow pick the TARGET USB to erase.")
+    target = _choose_target(allow_nav=True)
+    if not target:
+        raise _Cancelled
+    # BaseSystem + pkg download after the wipe confirm (in _run_intel_full), so a
+    # bad download fails before anything is erased.
+    return {"_intel_full": True, "target": target, "label": label,
+            "board": v["board"], "os_type": v["os"], "pkg_major": major}
+
+
+def _wizard_intel_full_local() -> dict:
+    """Supply the two files as paths."""
     dmg = Path(_input_path("\n  Path to the BaseSystem.dmg (Tab to complete): "))
     if not dmg.is_file():
         ui.warn(f"Not a file: {dmg}")
@@ -811,8 +866,13 @@ def cmd_wizard(args) -> int:
             print("\nCancelled.")
             return 1
         if plan.pop("_intel_full", False):
-            return _run_intel_full(plan["target"], plan["label"], yes=False,
-                                   dmg=Path(plan["dmg"]), pkg=Path(plan["pkg"]))
+            dmg, pkg = plan.get("dmg"), plan.get("pkg")
+            return _run_intel_full(
+                plan["target"], plan["label"], yes=False,
+                dmg=Path(dmg) if dmg else None,
+                pkg=Path(pkg) if pkg else None,
+                board=plan.get("board"), os_type=plan.get("os_type", "default"),
+                pkg_major=plan.get("pkg_major"))
         if plan.pop("_recovery", False):
             return _run_recovery(plan["target"], plan["label"], yes=False,
                                  board=plan["board"], os_type=plan["os_type"])

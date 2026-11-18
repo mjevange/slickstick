@@ -55,8 +55,11 @@ Intel build modes:
    `build_intel_full`): combines a recovery `BaseSystem.dmg` (bootable root) with an
    `InstallAssistant.pkg` (app + whole-pkgdmg `SharedSupport.dmg`) into a one-stick
    **offline** full installer — no Mac, no clone. Wizard: **Intel → Full offline
-   installer from a BaseSystem.dmg + a .pkg**. See the next section for the finding
-   behind it; experimental pending a clean end-to-end hardware finish.
+   installer**, then either **download both for me** (pick one macOS version — the
+   BaseSystem comes from `macrecovery` by a behind-the-scenes board-id, the matching
+   pkg from gibMacOS; no board typing) or **provide the two files** as paths. See the
+   next section for the finding behind it; experimental pending a clean end-to-end
+   hardware finish.
 
 ## Building Intel media from a downloaded pkg (from scratch, no clone)
 
