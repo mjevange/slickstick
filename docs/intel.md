@@ -1,8 +1,11 @@
 # Intel Macs — status & findings
 
-SlickStick's proven path is **Apple Silicon**. Intel support is **experimental**;
-this page documents what we've learned, because Intel boots differently — and some
-of it corrects widespread assumptions.
+Both architectures are **proven on real hardware**. On Intel, all three paths
+(recovery, full-installer clone, and from-scratch full installer) have booted real
+pre-T2 Macs, with the from-scratch offline install now carried end to end through a
+rebooted, running macOS. The one open item is Ventura+ (Cryptex) *booting*, pending a
+2018 Mac mini. This page documents what we've learned, because Intel boots
+differently — and some of it corrects widespread assumptions.
 
 ## How an Intel Mac boots USB installer media
 
@@ -57,9 +60,13 @@ Intel build modes:
    **offline** full installer — no Mac, no clone. Wizard: **Intel → Full offline
    installer**, then either **download both for me** (pick one macOS version — the
    BaseSystem comes from `macrecovery` by a behind-the-scenes board-id, the matching
-   pkg from gibMacOS; no board typing) or **provide the two files** as paths. See the
-   next section for the finding behind it; experimental pending a clean end-to-end
-   hardware finish.
+   pkg from gibMacOS; no board typing) or **provide the two files** as paths.
+   Downloaded files are cached under `~/.cache/slickstick/downloads` (keyed by
+   version/board) and reused on later runs, so a build hiccup never forces
+   re-pulling the ~12 GB pkg; set `SLICKSTICK_NO_CACHE=1` to opt out (downloads go
+   to scratch and aren't kept). This path is **hardware-validated end to end**
+   (2026-11-18): a web-downloaded build booted a pre-T2 iMac, installed offline to
+   a 3 TB disk, and the installed macOS booted to Setup Assistant — no Mac anywhere.
 
 ## Building Intel media from a downloaded pkg (from scratch, no clone)
 
@@ -99,10 +106,11 @@ gotcha: the reconstructed app bundle must contain no stray files (e.g. a nested 
 of the app), or codesign fails with "unsealed contents" and the installer calls the
 media "damaged."
 
-So a **pkg-based, no-Mac, no-clone Intel full installer** is viable; it's validated
-through "installer accepted + install running," pending only a clean finish on a
-fast target. The **recovery path below** remains the simplest one-stick option when
-a reinstall (vs. an offline full install) is enough.
+So a **pkg-based, no-Mac, no-clone Intel full installer** is viable — and now
+**proven end to end** (2026-11-18): a web-downloaded build booted a pre-T2 iMac,
+`startosinstall` installed offline onto a 3 TB disk, and the installed macOS rebooted
+to Setup Assistant. The **recovery path below** remains the simplest one-stick option
+when a reinstall (vs. an offline full install) is enough.
 
 ## A promising pkg-free path: Apple Recovery (`macrecovery.py`)
 
@@ -186,4 +194,4 @@ to reinstall and only the Safari cryptex fails to verify — the core function w
 | **End-to-end clone → boot on real Intel hardware** | ✅ **PROVEN** — a Monterey clone built on Linux booted an Intel iMac into the full installer (branded icon) |
 | **Recovery path** (`macrecovery.py` → BaseSystem → stick) | ✅ **PROVEN on hardware** — `build --recovery` built a Monterey stick on Linux that booted a real Intel iMac into Recovery (pkg-free, one stick, pure-Python UDIF decode) |
 | **Ventura+ recovery (Cryptexes)** | 🧪 structurally viable — cryptexes are plain files, no in-volume seal; boot test pending (2018 mini) |
-| **full-installer pkg → Intel (from scratch, no clone)** | 🧪 **validated** — a hand-built stick's `startosinstall` accepted the media & ran the install (no UpdateBrain, no cert/date trick) on a pre-T2 iMac; `SharedSupport.dmg` must be the whole **pkgdmg**; clean end-to-end finish pending a fast target disk |
+| **full-installer pkg → Intel (from scratch, no clone)** | ✅ **PROVEN end to end** — a web-downloaded build booted a pre-T2 iMac, `startosinstall` installed offline onto a 3 TB disk, and the installed macOS booted to Setup Assistant (no UpdateBrain, no cert/date trick); `SharedSupport.dmg` must be the whole **pkgdmg** |
