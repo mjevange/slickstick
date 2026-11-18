@@ -228,6 +228,7 @@ def copy_installer(hfs_part: str, app_dir: Path, work: Path,
         else:
             payload.write_markers_from_app(app_on_vol, dst, build_version)
             ui.ok("synthesized root markers (.IAPhysicalMedia + icon, restore/)")
+        _flushing_note()
         subprocess.run(["sudo", "sync"])
     finally:
         _umount(dst)
@@ -287,6 +288,13 @@ def stream_app_to_target(pkg: Path, dst: Path, repo_root: Path) -> Path:
     return app
 
 
+def _flushing_note() -> None:
+    """Flag that the post-write flush + unmount is slow on USB flash, so a long,
+    silent final stage doesn't look like a hang."""
+    ui.info("Flushing buffered writes to the USB and unmounting — on slow flash this "
+            "can take a few minutes; it's working, not stuck.")
+
+
 def build_streaming(target: str, pkg: Path, work: Path, hfs_label: str) -> None:
     """Write-only strategy: partition, then stream the app straight onto the USB
     with ~0 scratch space. Markers are synthesized from the streamed app."""
@@ -303,6 +311,7 @@ def build_streaming(target: str, pkg: Path, work: Path, hfs_label: str) -> None:
         app = stream_app_to_target(pkg, dst, repo_root)
         payload.write_markers_from_app(app, dst, payload.pkg_build_version(pkg))
         ui.ok("synthesized root markers (.IAPhysicalMedia + icon, restore/)")
+        _flushing_note()
         subprocess.run(["sudo", "sync"])
     finally:
         _umount(dst)
@@ -561,6 +570,7 @@ def build_intel_full(target: str, basesystem_dmg: Path, pkg: Path,
             app = stream_app_to_target(pkg, dst, repo_root)
             payload.write_markers_from_app(app, dst, payload.pkg_build_version(pkg))
             ui.ok("synthesized root markers (.IAPhysicalMedia + icon)")
+            _flushing_note()
             subprocess.run(["sudo", "sync"])
 
             boot_efi = dst / "System" / "Library" / "CoreServices" / "boot.efi"
