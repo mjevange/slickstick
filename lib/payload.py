@@ -167,9 +167,12 @@ def write_markers_from_app(app_on_volume: Path, volume_root: Path,
         os.unlink(tmp)
     subprocess.run(["sudo", "mkdir", "-p", str(volume_root / "restore")], check=True)
 
-    # Cosmetic: give the volume the installer's icon in the boot picker.
+    # Cosmetic: give the volume the installer's icon in the boot picker. Remove any
+    # existing entry first — a recovery BaseSystem ships .VolumeIcon.icns as a
+    # *dangling* symlink, and cp would refuse to "write through" it.
     icns = app_on_volume / "Contents" / "Resources" / "InstallAssistant.icns"
     if icns.exists():
+        subprocess.run(["sudo", "rm", "-f", str(volume_root / ".VolumeIcon.icns")])
         subprocess.run(["sudo", "cp", str(icns), str(volume_root / ".VolumeIcon.icns")])
 
 
