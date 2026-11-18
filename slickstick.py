@@ -559,55 +559,86 @@ def _cached_download(key: str, fetch, min_bytes: int, scratch: Path,
 def _run_intel_full(target: str, label: str, yes: bool, dmg: Path | None = None,
                     pkg: Path | None = None, board: str | None = None,
                     os_type: str = "default", pkg_major: int | None = None,
-                    workdir: str | None = None, no_cache: bool = False) -> int:
+                    workdir: str | None = None, no_cache: bool = False,
+                    keep_files: bool = True) -> int:
     """Safety-check, (download,) confirm, build, and unmount a from-scratch Intel
     full *offline* installer (recovery BaseSystem + pkg; no Mac, no clone).
 
     Supply ``dmg``/``pkg`` as files, or ``board``/``os_type``/``pkg_major`` to
     download both. Downloaded files are cached under ~/.cache/slickstick/downloads
-    and reused on later runs (so a build failure never forces re-pulling ~12 GB);
-    ``no_cache`` disables that. Downloads run after the wipe confirm but before
-    anything is erased, so a bad download fails before the target is touched."""
+    and reused on later runs (so a build failure never forces re-pulling ~12 GB).
+    ``keep_files`` keeps those downloads after a *successful* build; otherwise they
+    are removed (a failed build always keeps them so a retry is free). ``no_cache``
+    opts out of the persistent cache entirely (downloads go to scratch, nothing is
+    kept) and therefore forces cleanup. Downloads run after the wipe confirm but
+    before anything is erased, so a bad download fails before the target is touched."""
     try:
         usb.assert_safe_target(target, None)
     except usb.BuildError as e:
         print(f"SAFETY: {e}")
         return 1
+    created_work = workdir is None
     work = Path(workdir) if workdir else Path(
         tempfile.mkdtemp(prefix="intelfull-", dir=str(_default_work_base())))
     work.mkdir(parents=True, exist_ok=True)
     # Caching is on by default (a build hiccup shouldn't re-pull ~12 GB); set
-    # SLICKSTICK_NO_CACHE=1 to opt out (downloads go to scratch, nothing persists).
+    # SLICKSTICK_NO_CACHE=1 to opt out (downloads go to scratch, nothing persists —
+    # which also means there is nothing to keep).
     no_cache = no_cache or (os.environ.get("SLICKSTICK_NO_CACHE", "") not in ("", "0"))
+    if no_cache:
+        keep_files = False
     # Confirm the wipe BEFORE downloading: a mistyped confirmation must never cost
     # a multi-GB re-download, and the download shouldn't start until you've
     # committed to a target. Nothing is erased until the build step below.
     if not _confirm_wipe(target, yes):
         print("Cancelled.")
         return 1
+    downloaded: list[Path] = []   # files WE fetched into the cache (cleanup candidates)
     try:
         if dmg is None:
             dmg = _cached_download(
                 f"BaseSystem-{board or 'generic'}-{os_type}.dmg",
                 lambda d: recovery.download_recovery(board, os_type, d),
                 100_000_000, work, no_cache)
+            downloaded.append(Path(dmg))
         if pkg is None:
             pkg = _cached_download(
                 f"InstallAssistant-macos{pkg_major}.pkg",
                 lambda d: _download_full_pkg(pkg_major, d),
                 1_000_000_000, work, no_cache)
+            downloaded.append(Path(pkg))
     except Exception as e:  # noqa: BLE001
         print(f"Download failed: {e}")
         return 1
+    build_ok = False
     try:
         usb.ensure_sudo()
         with usb.SudoKeepAlive():
             usb.build_intel_full(target, Path(dmg), Path(pkg), work, label)
             usb.unmount_disk(target)
+        build_ok = True
     except Exception as e:  # noqa: BLE001
         print(f"Build failed: {e}")
         return 1
+    finally:
+        # Only ever clean up on SUCCESS; a failed build keeps everything (scratch
+        # AND downloads) so a retry doesn't re-pull ~12 GB or re-extract.
+        if build_ok:
+            if created_work:
+                shutil.rmtree(work, ignore_errors=True)   # ephemeral decode/extract junk
+            if not keep_files and not no_cache:
+                for f in downloaded:
+                    try:
+                        f.unlink()
+                    except OSError:
+                        pass
     print()
+    if downloaded:
+        if keep_files:
+            ui.info(f"Kept the downloaded files in {_download_cache()} "
+                    f"(reused automatically next run).")
+        elif not no_cache:
+            ui.info("Cleaned up the downloaded files (re-downloaded if you build again).")
     ui.ok(f"Finished — {target} is unmounted and safe to unplug.")
     print("  Boot it on the Intel Mac (hold Option); it lands in Recovery/Utilities.")
     print("  Open Utilities ▸ Terminal and install offline onto a target volume:")
@@ -779,6 +810,21 @@ def _prompt_valid_url() -> tuple[str, int]:
         return url, size
 
 
+def _ask_keep_files(what: str, approx: str) -> bool:
+    """Ask whether to keep the big reusable download/extract afterward.
+
+    One consistent question across arches (the only difference is what gets kept:
+    the unpacked installer on silicon, the downloaded BaseSystem+pkg on Intel).
+    Returns True to keep, False to clean up. Cleanup only ever happens on a
+    *successful* build — a failed build always keeps the files so a retry is free.
+    """
+    ui.heading(f"\nKeep the {what} afterward?")
+    return _menu([
+        "Keep them — I might make more sticks, or want the files for other reasons",
+        f"Clean up — just this one stick (frees ~{approx} after a successful build)",
+    ], "  Keep or clean up") == 0
+
+
 def _prompt_label(default: str, hint: str) -> str:
     """Prompt for a validated HFS+ volume name, re-asking on bad input."""
     while True:
@@ -867,9 +913,8 @@ def _wizard_intel_full() -> dict:
     print("\n  Builds a one-stick Intel FULL OFFLINE installer — no Mac, no clone —")
     print("  from a recovery BaseSystem (bootable root) + a full-installer pkg")
     print("  (the offline payload).")
-    print(f"  {ui.DIM}Experimental: on a pre-T2 iMac startosinstall accepted the media")
-    print(f"  and ran the install; a clean install-to-desktop finish is still being"
-          f" confirmed.{ui.RESET}")
+    print(f"  {ui.DIM}Proven on a pre-T2 iMac: web download -> build on Linux -> boot")
+    print(f"  -> offline install -> booted to Setup Assistant (no Mac anywhere).{ui.RESET}")
     if _menu([
         "Download both for me (just pick a macOS version)",
         "I'll provide the files (BaseSystem.dmg + .pkg paths)",
@@ -889,6 +934,7 @@ def _wizard_intel_full_download() -> dict:
     major = int(re.search(r"\((\d+)\)", v["name"]).group(1))
     name = v["name"].split(" (")[0]
     label = _prompt_label(f"Install macOS {name}", "Enter for the default")
+    keep_files = _ask_keep_files("downloaded macOS files (~12 GB)", "12 GB")
     ui.heading("\nNow pick the TARGET USB to erase.")
     target = _choose_target(allow_nav=True)
     if not target:
@@ -896,7 +942,8 @@ def _wizard_intel_full_download() -> dict:
     # BaseSystem + pkg download after the wipe confirm (in _run_intel_full), so a
     # bad download fails before anything is erased.
     return {"_intel_full": True, "target": target, "label": label,
-            "board": v["board"], "os_type": v["os"], "pkg_major": major}
+            "board": v["board"], "os_type": v["os"], "pkg_major": major,
+            "keep_files": keep_files}
 
 
 def _wizard_intel_full_local() -> dict:
@@ -956,7 +1003,8 @@ def cmd_wizard(args) -> int:
                 dmg=Path(dmg) if dmg else None,
                 pkg=Path(pkg) if pkg else None,
                 board=plan.get("board"), os_type=plan.get("os_type", "default"),
-                pkg_major=plan.get("pkg_major"))
+                pkg_major=plan.get("pkg_major"),
+                keep_files=plan.get("keep_files", True))
         if plan.pop("_recovery", False):
             return _run_recovery(plan["target"], plan["label"], yes=False,
                                  board=plan["board"], os_type=plan["os_type"])
@@ -1047,11 +1095,10 @@ def _wizard_collect(args) -> dict:
 
     strategy = "copy"
     if streamable and arch == "silicon":
-        ui.heading("\nMaking more than one USB from this installer?")
-        strategy = "stream" if _menu([
-            "Just this one — write straight to the USB, keep nothing (fastest, ~0 scratch space)",
-            "I might make more — keep the unpacked installer on disk (~18 GB) for instant re-copies",
-        ]) == 0 else "copy"
+        # Keep → copy (unpack the installer and keep it); clean up → stream (write
+        # straight to the USB, ~0 extra scratch). Same question as the Intel path.
+        strategy = "copy" if _ask_keep_files("unpacked installer (~18 GB)", "18 GB") \
+            else "stream"
 
     hint = f'"{default_label}"' if default_label != DEFAULT_LABEL else "copied from the installer"
     while True:
