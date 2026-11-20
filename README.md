@@ -12,6 +12,10 @@ Linux, with no Mac involved in the build. The macOS files are downloaded from
 Apple at run time (or supplied from files you already have); **no Apple software
 ships in this repo.**
 
+**Intel Macs too:** build a recovery stick, clone a `createinstallmedia` stick,
+or build a full offline installer from scratch — all proven on real Intel
+hardware. See [docs/intel.md](docs/intel.md).
+
 It works because of one finding: an Apple Silicon installer volume has **no HFS+
 "bless," an empty EFI partition, and a plain partition type** — the firmware
 recognizes the installer by its *content*, not by boot metadata. So a faithful
@@ -172,14 +176,15 @@ scratch space**, keeps nothing (ideal when disk is tight or the pkg is on a
 network share).
 </details>
 
-## Installing on the Mac (Intel)
+## Installing on the Mac
 
 Once the stick is built — SlickStick ejects it when the build finishes, so it's
 safe to unplug — do the install on the Mac itself:
 
-1. **Boot it.** Power on holding **Option (⌥)**, pick the stick. (On a **T2** Mac you
-   may first need to allow external boot: ⌘-R → **Startup Security Utility** → Reduced
-   Security + *Allow booting from external media*.)
+1. **Boot it.** On **Intel**, power on holding **Option (⌥)**; on **Apple Silicon**,
+   hold the **power button** until *Options* appears. Pick the stick. (On a **T2**
+   Intel Mac you may first need to allow external boot: ⌘-R → **Startup Security
+   Utility** → Reduced Security + *Allow booting from external media*.)
 2. **Install — the easy way.** In **macOS Utilities**, choose **"Reinstall macOS
    [version]" → Continue → select the target disk**. It installs **offline** from the
    stick — no Terminal. Use **Disk Utility** in that same window to erase/repartition
