@@ -3,8 +3,8 @@
 Apple Silicon installer media leaves finderInfo all-zero (the firmware keys on
 content, not bless) — our key finding. We still provide read/patch here for:
   - diagnostics (confirming the zero-bless on real media), and
-  - the EXPERIMENTAL Intel path, where EFI boot historically needs a real bless
-    pointing finderInfo at boot.efi.
+  - the Intel path, where bless is written as optional T2 insurance (EFI boot
+    works from boot.efi at the conventional path; the bless is not load-bearing).
 
 finderInfo is 8 big-endian uint32s at offset 80 within the HFS+ volume header,
 which itself starts 1024 bytes into the partition. CNIDs equal the inode numbers

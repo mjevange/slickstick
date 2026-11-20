@@ -224,8 +224,8 @@ def copy_installer(hfs_part: str, app_dir: Path, work: Path,
     """Copy the Install app onto the HFS+ volume and lay the root markers.
 
     If reference_root (a mounted createinstallmedia stick) is given, its real
-    markers are copied (the proven path). Otherwise markers are synthesized from
-    the app (the pkg path — see docs: not yet boot-verified end to end).
+    markers are copied. Otherwise markers are synthesized from the app (the pkg
+    path — see docs); both are boot-verified on Apple Silicon.
     """
     dst = work / "dst_rw"
     unmount_if_mounted(hfs_part)   # udisks may auto-mount the freshly formatted volume
@@ -372,15 +372,19 @@ def build(target: str, app_dir: Path, work: Path, hfs_label: str,
 
 
 # --------------------------------------------------------------------------- #
-# Intel (EXPERIMENTAL — see docs/how-it-works.md)
+# Intel, bare pkg/app -> EFI (EXPERIMENTAL, CLI-only — see docs/how-it-works.md)
 # --------------------------------------------------------------------------- #
 def build_intel(target: str, app_dir: Path, work: Path, hfs_label: str) -> None:
-    """EXPERIMENTAL and UNVERIFIED. Intel Macs boot via EFI (boot.efi in
-    .IABootFiles) plus a real HFS+ bless — unlike Apple Silicon. We have no
-    Intel Mac to test this on; treat output as a research artifact."""
+    """EXPERIMENTAL, CLI-only (`build --arch intel --local <app>`): lay a bare
+    Install app onto an EFI + HFS+ stick and attempt an optional HFS+ bless.
+    This specific path is unverified and the wizard never calls it — the proven
+    Intel paths are build_intel_clone / build_recovery / build_intel_full. A bare
+    Install app may not carry a boot.efi at a bootable location, so treat the
+    output as a research artifact."""
     from . import bless
 
-    print("!! EXPERIMENTAL Intel path — not verified to boot. See docs/how-it-works.md")
+    print("!! EXPERIMENTAL Intel path (bare app, CLI-only) — not verified to boot;")
+    print("!! the proven Intel paths are clone / recovery / full. See docs/how-it-works.md")
     esp, hfs = partition(target, hfs_label)
     format_parts(esp, hfs, hfs_label, journaled=False)
     copy_installer(hfs, app_dir, work, reference_root=None)
@@ -393,8 +397,8 @@ def build_intel(target: str, app_dir: Path, work: Path, hfs_label: str) -> None:
     try:
         boot_efi = next(dst.rglob("boot.efi"), None)
         if boot_efi is None:
-            print("!! No boot.efi found in the app — Intel media needs .IABootFiles; "
-                  "this build will almost certainly NOT boot. Documented gap.")
+            print("!! No boot.efi found in the app — this build will almost certainly "
+                  "NOT boot. Use the clone / recovery / full paths instead.")
         else:
             folder_cnid = bless.cnid(boot_efi.parent)
             file_cnid = bless.cnid(boot_efi)
@@ -601,7 +605,7 @@ def build_intel_full(target: str, basesystem_dmg: Path, pkg: Path,
             ui.step(5, 6, "Overlaying the Install app + SharedSupport payload (~12 GB)")
             app = stream_app_to_target(pkg, dst, repo_root)
             payload.write_markers_from_app(app, dst, payload.pkg_build_version(pkg))
-            ui.ok("synthesized root markers (.IAPhysicalMedia + icon)")
+            ui.ok("synthesized root markers (.IAPhysicalMedia + icon, restore/)")
             _write_firmware_check(dst, pkg, work)
             ui.ok("added firmware-check helper (T2 bridgeOS advisor)")
             _flushing_note()

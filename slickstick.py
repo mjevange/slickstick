@@ -5,8 +5,9 @@ Partitions a USB (GPT: empty ESP + Apple HFS+), formats HFS+, and copies a
 macOS installer onto it so Apple Silicon firmware boots it directly. The macOS
 files are fetched from Apple at run time (or supplied locally); none ship here.
 
-Apple Silicon is proven; Intel (recovery + full-installer clone) is proven on
-pre-T2 Macs. See docs/how-it-works.md and docs/intel.md.
+Apple Silicon is proven; Intel is proven too — clone, recovery, and a
+from-scratch full offline installer, booting on real Intel Macs (including a T2
+2018 mini). See docs/how-it-works.md and docs/intel.md.
 """
 from __future__ import annotations
 
@@ -230,7 +231,6 @@ def _pick_device(disks: list[dict], allow_nav: bool = False) -> str | None:
 
 
 def _confirm_wipe(target: str, assume_yes: bool) -> bool:
-    import subprocess
     ui.danger(f"\nAbout to ERASE {target}:")
     subprocess.run(["lsblk", "-o", "NAME,SIZE,TYPE,LABEL,FSTYPE,MOUNTPOINT", target])
     if assume_yes:
@@ -874,7 +874,7 @@ def _wizard_intel_recovery() -> dict:
     """Download an Apple Recovery image and build a bootable recovery stick."""
     print("\n  Downloads an Apple Recovery image and builds a bootable recovery")
     print("  stick (boots to macOS Recovery -> reinstall macOS over the internet).")
-    ui.heading("\nWhich macOS version? (pick the NEWEST your target Mac supports)")
+    ui.heading("\nWhich macOS version?")
     print("  Pick the newest macOS your target Mac supports.")
     opts = [f'{v["name"]} — {v["note"]}' for v in recovery.RECOVERY_VERSIONS]
     opts.append("Let my Mac pick the newest it supports (I'll enter its board-id)")
@@ -1242,7 +1242,6 @@ def _wizard_collect(args) -> dict:
 
 
 def _mount_reference(dev: str, work: Path) -> Path:
-    import subprocess
     mp = work / "reference_ro"
     mp.mkdir(parents=True, exist_ok=True)
     part = dev if dev[-1].isdigit() else dev + "2"
@@ -1251,7 +1250,6 @@ def _mount_reference(dev: str, work: Path) -> Path:
 
 
 def _umount_reference(mp: Path) -> None:
-    import subprocess
     subprocess.run(["sudo", "umount", str(mp)])
 
 

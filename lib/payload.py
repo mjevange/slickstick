@@ -7,10 +7,9 @@ A createinstallmedia stick carries, at the volume root:
   - restore/                         (an empty directory)
   - .VolumeIcon.icns                 (cosmetic)
 
-When the source is a reference stick we copy those markers verbatim (proven).
-When the source is a pkg we *synthesize* .IAPhysicalMedia + restore/ from the
-app's own version info (see docs/how-it-works.md — this path is not yet
-boot-verified end to end).
+When the source is a reference stick we copy those markers verbatim. When the
+source is a pkg we *synthesize* .IAPhysicalMedia + restore/ from the app's own
+version info (see docs/how-it-works.md); both are boot-verified on Apple Silicon.
 """
 from __future__ import annotations
 
@@ -75,14 +74,6 @@ def _extract_skeleton(pkg: Path, dest: Path) -> None:
     if p1.returncode or p2.returncode or p3.returncode:
         raise RuntimeError(f"skeleton extraction failed "
                            f"(bsdtar={p1.returncode}, pbzx={p2.returncode}, bsdtar={p3.returncode})")
-
-
-def _extract_member(pkg: Path, member: str, out: Path) -> None:
-    """Extract one plain xar member directly to a file (streams, no temp copy)."""
-    with open(out, "wb") as fh:
-        rc = subprocess.run(["bsdtar", "-xO", "-f", str(pkg), member], stdout=fh).returncode
-    if rc:
-        raise RuntimeError(f"extracting {member} from {pkg.name} failed (rc={rc})")
 
 
 def locate_install_app(root: Path) -> Path | None:
