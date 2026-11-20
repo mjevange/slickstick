@@ -815,7 +815,7 @@ def _prompt_valid_url() -> tuple[str, int]:
             continue
         if size:
             ui.ok(f"Reachable — {ui.human(size)}.")
-        ui.warn("With a custom URL (not the Option 1 gibMacOS method) SlickStick can't "
+        ui.warn("With a custom URL (not the 'Download from Apple' option) SlickStick can't "
                 "verify the installer's macOS version against your Mac's architecture "
                 "and model.")
         ans = input("  Enter = confirm it's compatible & continue  ·  "
@@ -1167,8 +1167,8 @@ def _wizard_collect(args) -> dict:
 
     ui.heading("\nHow should SlickStick get macOS?")
     pick = _menu([
-        "Download from Apple via gibMacOS (recommended)",
-        "Clone from an inserted macOS installer stick (real markers, proven)",
+        "Download from Apple (recommended)",
+        "Clone an inserted macOS installer stick",
         "Use files I already have (an Install app or a .pkg)",
         "Download a direct InstallAssistant.pkg URL",
     ])
@@ -1280,7 +1280,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="copy: extract to the work dir then copy onto the USB (default). "
                         "stream: write straight onto the USB from the pkg (~0 scratch space)")
     src = b.add_argument_group("macOS source (default: gibmacos)")
-    src.add_argument("--stick", help="clone an inserted installer stick's partition, e.g. /dev/sdc2 (real markers)")
+    src.add_argument("--stick", help="clone an inserted installer stick's partition, e.g. /dev/sdc2")
     src.add_argument("--local", help="path to an existing Install app or a .pkg")
     src.add_argument("--url", help="direct InstallAssistant.pkg URL (Apple CDN)")
     src.add_argument("--recovery", help="Intel: a BaseSystem.dmg (from macrecovery.py). "
