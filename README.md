@@ -78,26 +78,32 @@ target USB**, and the install steps on the Mac can erase a disk too.
 cleans up after itself:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mjevange/slickstick/main/run.sh | bash
+curl -fsSL https://mjevange.github.io/slickstick/run.sh | bash
 ```
 
 **Or install a reusable `slickstick` command** (clones to
 `~/.local/share/slickstick`, launcher in `~/.local/bin`):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mjevange/slickstick/main/install.sh | bash
+curl -fsSL https://mjevange.github.io/slickstick/install.sh | bash
 ```
 
 Works in **any shell** — bash, zsh, **fish**. The bootstraps read your terminal
 directly (`/dev/tty`), so the wizard stays interactive even through the pipe. To
 pass arguments, append `-s --`, e.g. `… | bash -s -- devices`.
 
+The scripts are served over GitHub's global CDN (reachable where
+`raw.githubusercontent.com` is blocked). Prefer to read before you run? Pull it
+down first: `curl -fsSL https://mjevange.github.io/slickstick/run.sh -o run.sh &&
+less run.sh && bash run.sh`. They also live straight in the repo at
+`raw.githubusercontent.com/mjevange/slickstick/main/{run,install}.sh`.
+
 <details>
 <summary>Prefer process substitution? (bash/zsh or fish)</summary>
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/mjevange/slickstick/main/run.sh)       # bash / zsh
-bash (curl -fsSL https://raw.githubusercontent.com/mjevange/slickstick/main/run.sh | psub) # fish
+bash <(curl -fsSL https://mjevange.github.io/slickstick/run.sh)       # bash / zsh
+bash (curl -fsSL https://mjevange.github.io/slickstick/run.sh | psub) # fish
 ```
 </details>
 

@@ -2,10 +2,10 @@
 # Grab-and-run: fetch SlickStick to a temporary directory, launch the wizard,
 # and clean up on exit. Nothing is installed; nothing is left behind.
 #
-#   curl -fsSL https://raw.githubusercontent.com/mjevange/slickstick/main/run.sh | bash
+#   curl -fsSL https://mjevange.github.io/slickstick/run.sh | bash
 #
 # Pass arguments with `-s --`, e.g.:
-#   curl -fsSL https://raw.githubusercontent.com/mjevange/slickstick/main/run.sh | bash -s -- devices
+#   curl -fsSL https://mjevange.github.io/slickstick/run.sh | bash -s -- devices
 #
 # Works in any shell (bash, zsh, fish). This script reads /dev/tty directly, so
 # the wizard's prompts work even though the bootstrap arrived over the pipe.

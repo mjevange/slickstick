@@ -2,10 +2,10 @@
 # SlickStick bootstrap installer.
 #
 # Install the `slickstick` command:
-#   curl -fsSL https://raw.githubusercontent.com/mjevange/slickstick/main/install.sh | bash
+#   curl -fsSL https://mjevange.github.io/slickstick/install.sh | bash
 #
 # Install and launch the wizard immediately:
-#   curl -fsSL https://raw.githubusercontent.com/mjevange/slickstick/main/install.sh | bash -s -- --run
+#   curl -fsSL https://mjevange.github.io/slickstick/install.sh | bash -s -- --run
 #
 # Works in any shell (bash, zsh, fish). The --run launch reads /dev/tty directly,
 # so the wizard's prompts work even through the pipe.
