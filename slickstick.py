@@ -853,16 +853,19 @@ def _prompt_label(default: str, hint: str) -> str:
 
 
 def _wizard_intel() -> dict:
-    """Intel build flow: Apple Recovery download (proven) or clone a stick."""
+    """Intel build flow: a full offline installer (from scratch or by cloning a
+    stick), or a slim recovery stick that downloads macOS during install."""
     ui.heading("\nHow should SlickStick build the Intel stick?")
-    choice = _menu([
-        "Download macOS Recovery from Apple (proven — boots real Intel Macs, 1 stick)",
-        "Clone an inserted createinstallmedia stick (full offline installer)",
-        "Full offline installer from a BaseSystem.dmg + a .pkg (no Mac, no clone)",
-    ])
-    if choice == 0:
+    if _menu([
+        "Full offline installer — installs with no internet",
+        "Recovery — downloads macOS during install (fine on a small USB)",
+    ]) == 1:
         return _wizard_intel_recovery()
-    if choice == 1:
+    ui.heading("\nFull offline installer — where from?")
+    if _menu([
+        "Download & build from scratch",
+        "Clone an inserted createinstallmedia stick",
+    ]) == 1:
         return _wizard_intel_clone()
     return _wizard_intel_full()
 
