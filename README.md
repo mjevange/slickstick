@@ -33,8 +33,14 @@ content copy over Linux's own `hfsplus` driver is enough. See
 | **Intel** (recovery) | ✅ **Proven** — `build --recovery` builds an Apple Recovery stick on Linux (pkg-free, one stick) that **boots a real Intel Mac into Recovery**. See [docs/intel.md](docs/intel.md) |
 | **Intel** (full installer) | ✅ **Proven** — clone a `createinstallmedia` stick (`build_intel_clone`) → boots a real Intel Mac into the **full installer** (branded icon; bless not required). Modern pkg→Intel is blocked (sealed asset) |
 
-This is a tool for making install media for **Macs you own**. It erases the
-target USB.
+This is a tool for making install media for **Macs you own**. It **erases the
+target USB**, and the install steps on the Mac can erase a disk too.
+
+> ⚠️ **No warranty — use at your own risk.** SlickStick is provided **as-is**, with
+> no warranty of any kind. Making install media and installing macOS can cause
+> **data loss** or leave a machine unbootable. By using it you accept responsibility
+> for any data loss or system changes. Only use it on hardware you own, and back up
+> anything you care about first.
 
 ## Features
 
@@ -166,6 +172,40 @@ scratch space**, keeps nothing (ideal when disk is tight or the pkg is on a
 network share).
 </details>
 
+## Installing on the Mac (Intel)
+
+Once the stick is built, do the install on the Mac itself:
+
+1. **Boot it.** Power on holding **Option (⌥)**, pick the stick. (On a **T2** Mac you
+   may first need to allow external boot: ⌘-R → **Startup Security Utility** → Reduced
+   Security + *Allow booting from external media*.)
+2. **Install — the easy way.** In **macOS Utilities**, choose **"Reinstall macOS
+   [version]" → Continue → select the target disk**. It installs **offline** from the
+   stick — no Terminal. Use **Disk Utility** in that same window to erase/repartition
+   the target first (APFS, GUID) if you want a clean install.
+
+**Will it need the internet?** On a **T2** Mac the chip may pull a one-time firmware
+(bridgeOS) update from Apple during the install — that step can't be bundled on the
+USB. You can't reliably predict whether a given install needs it, so just **have
+Ethernet/Wi-Fi available**; it's only used if an update is actually needed. To check
+what kind of Mac you're on, open **Utilities ▸ Terminal** and run:
+
+```sh
+bash "/Volumes/<name>/firmware-check"
+```
+
+(The stick often mounts as `/Volumes/Untitled` in recovery — run `ls /Volumes` to see
+the name.) If an install ever **stops near 50%** with "An error occurred installing
+macOS", connect to the internet and retry — that's the firmware step.
+
+**Fallback** (rare Macs where Utilities doesn't offer the local install) — install
+from the Terminal instead:
+
+```sh
+"/Volumes/<name>/Install macOS <ver>.app/Contents/Resources/startosinstall" \
+  --agreetolicense --volume "/Volumes/<target>"
+```
+
 ## macOS sources
 
 | Source | Flag | What it does |
@@ -261,7 +301,8 @@ built with no Mac in the loop.
 - Won't use the same disk your source files came from.
 - Requires a typed confirmation of the device name before wiping.
 
-Always double-check the device — `/dev/sdX` names can shift between plug-ins.
+Always double-check the device — `/dev/sdX` names can shift between plug-ins. And
+back up the Mac's target disk before installing — the install erases it.
 
 ## Legal
 
