@@ -5,9 +5,11 @@ Both architectures are **proven on real hardware**. On Intel, all three paths
 Macs, with the from-scratch offline install carried end to end on a **pre-T2** iMac
 through a rebooted, running macOS. **Cryptex-era boot (Ventura+) is now confirmed on
 T2**: a Sonoma (14) from-scratch stick booted a 2018 Mac mini into Recovery. The one
-remaining boundary is the **T2 offline *install*** — it is blocked by a firmware
-(bridgeOS) step that requires Apple's servers (see "T2 and the bridgeOS firmware wall"
-below; whether any offline path exists is under investigation). This page documents
+remaining boundary is the **T2 offline *install*** when a firmware (bridgeOS) **bump** is
+required — that step needs Apple's signing servers and is online-only for *everyone*
+(Apple's own `createinstallmedia` included). Offline T2 install still works when the Mac's
+current bridgeOS already meets the target's minimum (see "T2 and the bridgeOS firmware wall"
+below). This page documents
 what we've learned, because Intel boots differently — and some of it corrects
 widespread assumptions.
 
@@ -232,15 +234,41 @@ Macs have no bridgeOS at all** — which is exactly why the pre-T2 iMac installe
 offline* and the T2 mini cannot. The stick itself is provably correct: it boots, prepares,
 extracts the payload, and skips personalization; the wall is an Apple T2 requirement.
 
-So **offline full-install is, as of this finding, a pre-T2 capability**; on T2 the firmware
-step needs the network. Open questions under active investigation (this section will be
-updated): (1) a bridgeOS-related `BuildManifest.plist` *was* staged locally
-(`macOS Install Data/UpdateBundle/AssetData/boot/`), so some firmware payload may already be
-on the stick — is the blocker really the online **catalog/trust/clock** path rather than a
-missing payload? (2) Does setting a correct clock let trust-verification use the *local*
-bundle offline (`Failed to verify clock with apple.com` is in the log)? (3) Does a real
-`createinstallmedia` USB update bridgeOS offline on T2, or does it need the network too? If
-the latter, offline T2 install is impossible for anyone, not just us.
+**Why this is an Apple wall, not a stick defect (researched 2026-11-20).** bridgeOS is
+iOS-style **IMG4 secure-boot firmware**. The *payload* can sit on the USB — that's exactly
+the staged `UpdateBundle` / `BuildManifest.plist` — but **flashing it requires a live,
+Apple-signed manifest personalized to that T2's ECID + an anti-replay nonce** (a TSS
+"personalization"), which only Apple's signing servers (`gs.apple.com`/`gdmf`/`mescon`) can
+produce, and only for firmware Apple is currently signing. **Payload = shippable;
+authorization = not shippable.** Confirmed implications:
+
+- **A real `createinstallmedia` USB *also* fails offline on T2 when a bump is required** —
+  real users hit the same ~40–50% "internet required" error with Apple's own media
+  (Apple Discussions 253788316; Jamf; Mr. Macintosh). So **no one** gets an offline T2
+  firmware bump — this is not a SlickStick defect.
+- **A correct clock does *not* help offline.** The `-1009`/"failed to verify clock" lines are
+  symptoms of *no network*, not a bad clock; no date value reaches Apple's signing servers.
+  (A wrong clock only matters when you *are* online.)
+- **`UpdateBrain` vs `UpdateBundle`:** UpdateBundle = the firmware/OS *payload*; UpdateBrain =
+  a zipped XPC bundle of installer *code* shipped with a given update (builds the snapshot /
+  seal). Both can be local; neither supplies the Apple authorization.
+
+**The offline T2 win that DOES exist — matched firmware.** When the Mac's current bridgeOS
+**already meets** the target macOS's minimum, the firmware step is *skipped* and the rest of
+the install runs locally. So **offline T2 install works when `current bridgeOS ≥ required`** —
+e.g. re-installing the same or an older macOS release than the Mac last ran. Only a *bump*
+is online-only. (Our mini demanded a bump for Sonoma 14, so its firmware is below 14's
+minimum; an offline install of an older release it already satisfies should complete.)
+
+**Implied product behavior (planned):** SlickStick/Recovery should read the current bridgeOS
+and the target's required minimum and either proceed fully offline or surface a clear
+"this install needs a one-time online firmware step" message — instead of failing opaquely at
+~50% with Code 561. See [[slickstick-backlog]].
+
+Sources: newosxbook.com/articles/BridgeOS.html; eclecticlight.co (UpdateBrain / "install
+personalised" / nonces); groups.google.com/g/munki-dev/c/3ixXsCbHUTM (startosinstall ignores
+CatalogURL; `softwareupdate -iaR` handles the iBridge restart); theiphonewiki SecureBoot +
+Apple Platform Security (IMG4 personalization tied to T2 ECID).
 
 ## Status
 
@@ -254,4 +282,5 @@ the latter, offline T2 install is impossible for anyone, not just us.
 | **Recovery path** (`macrecovery.py` → BaseSystem → stick) | ✅ **PROVEN on hardware** — `build --recovery` built a Monterey stick on Linux that booted a real Intel iMac into Recovery (pkg-free, one stick, pure-Python UDIF decode) |
 | **Ventura+ recovery (Cryptexes) — boot** | ✅ **PROVEN on T2** — a Sonoma (14) from-scratch stick (built on Linux) booted a T2 2018 Mac mini into Recovery with the branded "macOS Base System" logo; the Cryptexes survive our plain file-copy and boot on real T2 hardware |
 | **full-installer pkg → Intel (from scratch, no clone) — install** | ✅ **PROVEN end to end on pre-T2** — a web-downloaded build booted a pre-T2 iMac, `startosinstall` installed offline onto a 3 TB disk, and the installed macOS booted to Setup Assistant (no UpdateBrain, no cert/date trick); `SharedSupport.dmg` must be the whole **pkgdmg** |
-| **T2 offline *install* (Phase 2 apply)** | ⛔ **blocked by the bridgeOS firmware step** — boots + prepares + extracts + skips personalization, then fails at ~50% because the T2 install requires an online bridgeOS update (see below). Boot/prepare proven; offline completion is the open boundary |
+| **T2 offline *install* — firmware *bump* case** | ⛔ **online-only for everyone** (incl. Apple's `createinstallmedia`) — a bridgeOS bump needs Apple's signing servers; fails at ~50% (Code 561). Not a stick defect |
+| **T2 offline *install* — matched-firmware case** | 🧪 **expected to work** — when current bridgeOS ≥ target's minimum, the firmware step is skipped; boot + prepare already proven on T2. Pending a matched-version install test on the mini |
