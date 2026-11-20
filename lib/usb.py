@@ -186,7 +186,13 @@ def partition(target: str, hfs_label: str) -> tuple[str, str]:
     _run(["sudo", "sgdisk", "-Z", target])
     _run(["sudo", "sgdisk", "-n", "1:0:+200M", "-t", f"1:{ESP_TYPE}",
           "-c", "1:EFI System Partition", target])
-    _run(["sudo", "sgdisk", "-n", "2:0:0", "-t", f"2:{HFS_TYPE}", "-c", "2:", target])
+    # Name the GPT partition entry after the volume too (GPT names are UTF-16, max
+    # 36 chars). It was left blank, which macOS appears to fall back to as the mount
+    # name — showing the stick as "Untitled" in the recovery Terminal even though the
+    # HFS+ volume name is set. Giving it a name matches what Disk Utility/createinstall
+    # media produce.
+    _run(["sudo", "sgdisk", "-n", "2:0:0", "-t", f"2:{HFS_TYPE}",
+          "-c", f"2:{hfs_label[:36]}", target])
     _run(["sudo", "partprobe", target])
     subprocess.run(["sudo", "sync"])
     p = "p" if target[-1].isdigit() else ""
