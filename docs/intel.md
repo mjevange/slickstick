@@ -2,10 +2,14 @@
 
 Both architectures are **proven on real hardware**. On Intel, all three paths
 (recovery, full-installer clone, and from-scratch full installer) have booted real
-pre-T2 Macs, with the from-scratch offline install now carried end to end through a
-rebooted, running macOS. The one open item is Ventura+ (Cryptex) *booting*, pending a
-2018 Mac mini. This page documents what we've learned, because Intel boots
-differently — and some of it corrects widespread assumptions.
+Macs, with the from-scratch offline install carried end to end on a **pre-T2** iMac
+through a rebooted, running macOS. **Cryptex-era boot (Ventura+) is now confirmed on
+T2**: a Sonoma (14) from-scratch stick booted a 2018 Mac mini into Recovery. The one
+remaining boundary is the **T2 offline *install*** — it is blocked by a firmware
+(bridgeOS) step that requires Apple's servers (see "T2 and the bridgeOS firmware wall"
+below; whether any offline path exists is under investigation). This page documents
+what we've learned, because Intel boots differently — and some of it corrects
+widespread assumptions.
 
 ## How an Intel Mac boots USB installer media
 
@@ -186,6 +190,58 @@ extends to Ventura+ unchanged** — pending the one thing Linux can't answer: a 
 boot (a 2018 Mac mini is ordered to confirm). Worst case, the recovery still boots
 to reinstall and only the Safari cryptex fails to verify — the core function works.
 
+## T2 hardware results (2018 Mac mini, Macmini8,1) — Cryptex boot ✅, offline install ⛔
+
+Settled on a real **T2** Mac what Linux alone couldn't:
+
+**Cryptex boot works on T2 (proven 2026-11-20).** A **Sonoma (14)** from-scratch full
+installer, built entirely on Linux, booted the T2 2018 Mac mini into macOS Recovery with
+the branded "macOS Base System" logo. So the `System/Cryptexes/OS|App` directories survive
+our plain `bsdtar` file-copy and boot on real T2 hardware — the structural recon was right,
+and the recovery/full-installer path extends into the Cryptex era (Ventura/Sonoma/Sequoia).
+
+Two T2-specific operational notes:
+- **Secure Boot must allow external media first.** A T2 Mac ships "Full Security" with
+  external boot disabled. Boot built-in recoveryOS (⌘-R), open **Startup Security Utility**,
+  set **Reduced/No Security** *and* **Allow booting from external media**, or the stick won't
+  appear in the ⌥ boot picker (a *policy* block, not a media failure).
+- The install log during `startosinstall` is **RAM-only** (the Recovery environment is a RAM
+  disk); it does **not** persist to the target, so it must be read live
+  (`tail -n 200 /var/log/install.log`) before unplugging/rebooting. Recovery's Terminal has a
+  minimal toolset (`grep -iE` fails with "illegal operator"; use `tail`/`cat`/single-word `grep`).
+
+### T2 and the bridgeOS firmware wall (the offline-install boundary)
+
+The from-scratch **install** on T2 reproducibly fails at ~50% with "An error occurred
+installing macOS" (`OSInstallerSetup.error Code=561`). The live install.log root-causes it
+precisely — and it is **not** personalization and **not** a media defect:
+
+```
+osinstallersetupd: Personalization is not required … Skipping personalization   ← NOT the blocker
+OSISDownloadOperation: bridgeOS update is required (minimum bridge version: 23.16.1066.0.0.0)
+OSISDownloadOperation: Using catalog for bridgeOS: https://mescon.apple.com/content/catalog/...
+The Internet connection appears to be offline (NSURLErrorDomain Code=-1009)
+Failed to verify clock with apple.com … offline        Could not verify trust (5)
+Error loading software update catalog: MSUProductManagerErrorDomain Code=51   →  Code=561
+```
+
+**Root cause:** the T2 install insists on updating the **bridgeOS** (the T2 chip's own
+firmware) to a minimum version, and reaches for Apple's software-update catalog
+(`mescon.apple.com`) to do it. Offline, that fetch fails and the install aborts. **Pre-T2
+Macs have no bridgeOS at all** — which is exactly why the pre-T2 iMac installed *fully
+offline* and the T2 mini cannot. The stick itself is provably correct: it boots, prepares,
+extracts the payload, and skips personalization; the wall is an Apple T2 requirement.
+
+So **offline full-install is, as of this finding, a pre-T2 capability**; on T2 the firmware
+step needs the network. Open questions under active investigation (this section will be
+updated): (1) a bridgeOS-related `BuildManifest.plist` *was* staged locally
+(`macOS Install Data/UpdateBundle/AssetData/boot/`), so some firmware payload may already be
+on the stick — is the blocker really the online **catalog/trust/clock** path rather than a
+missing payload? (2) Does setting a correct clock let trust-verification use the *local*
+bundle offline (`Failed to verify clock with apple.com` is in the log)? (3) Does a real
+`createinstallmedia` USB update bridgeOS offline on T2, or does it need the network too? If
+the latter, offline T2 install is impossible for anyone, not just us.
+
 ## Status
 
 | Piece | State |
@@ -196,5 +252,6 @@ to reinstall and only the Safari cryptex fails to verify — the core function w
 | Full-tree clone for Intel (`build_intel_clone`) | ✅ implemented |
 | **End-to-end clone → boot on real Intel hardware** | ✅ **PROVEN** — a Monterey clone built on Linux booted an Intel iMac into the full installer (branded icon) |
 | **Recovery path** (`macrecovery.py` → BaseSystem → stick) | ✅ **PROVEN on hardware** — `build --recovery` built a Monterey stick on Linux that booted a real Intel iMac into Recovery (pkg-free, one stick, pure-Python UDIF decode) |
-| **Ventura+ recovery (Cryptexes)** | 🧪 structurally viable — cryptexes are plain files, no in-volume seal; boot test pending (2018 mini) |
-| **full-installer pkg → Intel (from scratch, no clone)** | ✅ **PROVEN end to end** — a web-downloaded build booted a pre-T2 iMac, `startosinstall` installed offline onto a 3 TB disk, and the installed macOS booted to Setup Assistant (no UpdateBrain, no cert/date trick); `SharedSupport.dmg` must be the whole **pkgdmg** |
+| **Ventura+ recovery (Cryptexes) — boot** | ✅ **PROVEN on T2** — a Sonoma (14) from-scratch stick (built on Linux) booted a T2 2018 Mac mini into Recovery with the branded "macOS Base System" logo; the Cryptexes survive our plain file-copy and boot on real T2 hardware |
+| **full-installer pkg → Intel (from scratch, no clone) — install** | ✅ **PROVEN end to end on pre-T2** — a web-downloaded build booted a pre-T2 iMac, `startosinstall` installed offline onto a 3 TB disk, and the installed macOS booted to Setup Assistant (no UpdateBrain, no cert/date trick); `SharedSupport.dmg` must be the whole **pkgdmg** |
+| **T2 offline *install* (Phase 2 apply)** | ⛔ **blocked by the bridgeOS firmware step** — boots + prepares + extracts + skips personalization, then fails at ~50% because the T2 install requires an online bridgeOS update (see below). Boot/prepare proven; offline completion is the open boundary |
