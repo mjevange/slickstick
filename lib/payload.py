@@ -141,42 +141,31 @@ def pkg_app_name(pkg: Path) -> str | None:
     return m.group(1) if m else None
 
 
-# macOS release name -> major version. Used only to compute the required bridgeOS
-# "epoch" hint in the firmware-check helper (a convenience, not a gate).
-_MACOS_MAJORS = {"Big Sur": 11, "Monterey": 12, "Ventura": 13,
-                 "Sonoma": 14, "Sequoia": 15}
-
-
 def firmware_check_script(app_name: str | None) -> str:
     """Return a self-contained shell script for the Intel installer stick that
-    reports the target Mac's current bridgeOS (T2 firmware) and whether this
-    install is likely to need a one-time internet connection for a firmware
-    update (see docs/intel.md — "the bridgeOS firmware wall"). The user runs it
+    reports whether the target Mac is a T2 (whose firmware updates during install
+    can require the network) and gives honest, actionable advice. The user runs it
     in the macOS Recovery Terminal before installing.
 
-    It stays advisory, not a hard verdict: T2 firmware is personalized by Apple
-    and point-release bumps exist, so the only guaranteed-safe advice is "if in
-    doubt, connect the network — it's used only if a bump is actually needed."
-    ``app_name`` is the installer app name (e.g. "Install macOS Sonoma"); its
-    macOS major gives the required bridgeOS epoch (which tracks the macOS Darwin
-    version: 21=Monterey … 24=Sequoia, i.e. major + 9).
+    It deliberately does NOT try to predict offline-safety from version numbers:
+    real data showed that gives wrong answers — a Sonoma install failed offline at
+    a bridgeOS the version math called "new enough," because a same-era *point*
+    bump was required (Apple decides at install time; see docs/intel.md). So it
+    shows the firmware for reference only and gives the one always-correct rule:
+    have the network available; it's used only if an update is actually needed.
+    ``app_name`` (e.g. "Install macOS Sonoma") is used only for the header.
     """
     name = (app_name or "macOS").replace("Install macOS ", "").strip() or "macOS"
-    major = _MACOS_MAJORS.get(name)
-    epoch_line = ""
-    if major:
-        epoch_line = (f'echo "   (bridgeOS era tracks macOS: 21=Monterey 22=Ventura '
-                      f'23=Sonoma 24=Sequoia; {name} needs about {major + 9} or newer)"')
     return f'''#!/bin/bash
-# SlickStick firmware-check: does THIS Mac need internet to install {name}?
-# Run it in the macOS Recovery Terminal (the same place you run startosinstall).
+# SlickStick firmware-check: will installing {name} on THIS Mac need the internet?
+# Run it in the macOS Recovery Terminal before installing.
 set -u
 echo "== SlickStick firmware check =="
 echo "This installer: {name}"
 echo
 RC=/usr/libexec/remotectl
 if [ ! -x "$RC" ]; then
-  echo "remotectl not present -- this is almost certainly a PRE-T2 Intel Mac."
+  echo "remotectl not present -- almost certainly a PRE-T2 Intel Mac."
   echo "Pre-T2 Macs have no T2 firmware and install FULLY OFFLINE. You are good."
   exit 0
 fi
@@ -185,20 +174,21 @@ if [ -z "$BV" ]; then
   echo "No T2 bridge detected -- looks like a pre-T2 Mac. Installs fully offline."
   exit 0
 fi
-echo "This Mac has a T2 chip. Current firmware (bridgeOS):"
+echo "This Mac has a T2 chip. Firmware (bridgeOS) versions it reports:"
 echo "$BV" | sed 's/^/   /'
+echo "(The T2 reports more than one firmware-related version; shown for reference.)"
 echo
 echo "What this means:"
 echo " - A T2 updates its firmware (bridgeOS) during a macOS install, and that"
-echo "   firmware is fetched from Apple -- it cannot be bundled on the USB."
-echo " - If {name} is NEWER than what this Mac last ran, the install needs a"
-echo "   ONE-TIME internet connection, or it stops near 50% with"
-echo '   "An error occurred installing macOS".'
-echo " - If the firmware already matches, it installs fully offline."
-{epoch_line}
+echo "   update is fetched from Apple -- it cannot be bundled on the USB."
+echo " - Whether THIS install needs an update is decided by Apple at install time"
+echo "   and cannot be reliably predicted here: the version numbers do not tell the"
+echo "   whole story (a same-version point update can still be required)."
 echo
-echo "Safest move: connect Ethernet or Wi-Fi in Recovery before installing."
-echo "It is only used if a firmware update is actually needed, harmless otherwise."
+echo "Bottom line: have Ethernet or Wi-Fi available before you install."
+echo "It is used ONLY if a firmware update is actually needed, harmless otherwise."
+echo "If the install stalls near 50% at \\"An error occurred installing macOS\\","
+echo "connect to the internet and retry -- that is the firmware step."
 '''
 
 
