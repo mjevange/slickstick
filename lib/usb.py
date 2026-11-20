@@ -295,6 +295,19 @@ def _flushing_note() -> None:
             "can take a few minutes; it's working, not stuck.")
 
 
+def _write_firmware_check(dst: Path, pkg: Path, work: Path) -> None:
+    """Drop a 'firmware-check' helper at the installer stick's root — a T2
+    bridgeOS advisor the user can run in Recovery to see whether this install
+    needs a one-time internet connection (see payload.firmware_check_script and
+    docs/intel.md). Written at the volume root (never inside the .app bundle,
+    which would break codesign). The HFS+ mount is root-owned, so via sudo."""
+    script = payload.firmware_check_script(payload.pkg_app_name(pkg))
+    local = work / "firmware-check"
+    local.write_text(script)
+    subprocess.run(["sudo", "cp", str(local), str(dst / "firmware-check")], check=True)
+    subprocess.run(["sudo", "chmod", "0755", str(dst / "firmware-check")], check=True)
+
+
 def build_streaming(target: str, pkg: Path, work: Path, hfs_label: str) -> None:
     """Write-only strategy: partition, then stream the app straight onto the USB
     with ~0 scratch space. Markers are synthesized from the streamed app."""
@@ -570,6 +583,8 @@ def build_intel_full(target: str, basesystem_dmg: Path, pkg: Path,
             app = stream_app_to_target(pkg, dst, repo_root)
             payload.write_markers_from_app(app, dst, payload.pkg_build_version(pkg))
             ui.ok("synthesized root markers (.IAPhysicalMedia + icon)")
+            _write_firmware_check(dst, pkg, work)
+            ui.ok("added firmware-check helper (T2 bridgeOS advisor)")
             _flushing_note()
             subprocess.run(["sudo", "sync"])
 

@@ -141,6 +141,67 @@ def pkg_app_name(pkg: Path) -> str | None:
     return m.group(1) if m else None
 
 
+# macOS release name -> major version. Used only to compute the required bridgeOS
+# "epoch" hint in the firmware-check helper (a convenience, not a gate).
+_MACOS_MAJORS = {"Big Sur": 11, "Monterey": 12, "Ventura": 13,
+                 "Sonoma": 14, "Sequoia": 15}
+
+
+def firmware_check_script(app_name: str | None) -> str:
+    """Return a self-contained shell script for the Intel installer stick that
+    reports the target Mac's current bridgeOS (T2 firmware) and whether this
+    install is likely to need a one-time internet connection for a firmware
+    update (see docs/intel.md — "the bridgeOS firmware wall"). The user runs it
+    in the macOS Recovery Terminal before installing.
+
+    It stays advisory, not a hard verdict: T2 firmware is personalized by Apple
+    and point-release bumps exist, so the only guaranteed-safe advice is "if in
+    doubt, connect the network — it's used only if a bump is actually needed."
+    ``app_name`` is the installer app name (e.g. "Install macOS Sonoma"); its
+    macOS major gives the required bridgeOS epoch (which tracks the macOS Darwin
+    version: 21=Monterey … 24=Sequoia, i.e. major + 9).
+    """
+    name = (app_name or "macOS").replace("Install macOS ", "").strip() or "macOS"
+    major = _MACOS_MAJORS.get(name)
+    epoch_line = ""
+    if major:
+        epoch_line = (f'echo "   (bridgeOS era tracks macOS: 21=Monterey 22=Ventura '
+                      f'23=Sonoma 24=Sequoia; {name} needs about {major + 9} or newer)"')
+    return f'''#!/bin/bash
+# SlickStick firmware-check: does THIS Mac need internet to install {name}?
+# Run it in the macOS Recovery Terminal (the same place you run startosinstall).
+set -u
+echo "== SlickStick firmware check =="
+echo "This installer: {name}"
+echo
+RC=/usr/libexec/remotectl
+if [ ! -x "$RC" ]; then
+  echo "remotectl not present -- this is almost certainly a PRE-T2 Intel Mac."
+  echo "Pre-T2 Macs have no T2 firmware and install FULLY OFFLINE. You are good."
+  exit 0
+fi
+BV="$("$RC" dumpstate 2>/dev/null | grep -i BridgeVersion)"
+if [ -z "$BV" ]; then
+  echo "No T2 bridge detected -- looks like a pre-T2 Mac. Installs fully offline."
+  exit 0
+fi
+echo "This Mac has a T2 chip. Current firmware (bridgeOS):"
+echo "$BV" | sed 's/^/   /'
+echo
+echo "What this means:"
+echo " - A T2 updates its firmware (bridgeOS) during a macOS install, and that"
+echo "   firmware is fetched from Apple -- it cannot be bundled on the USB."
+echo " - If {name} is NEWER than what this Mac last ran, the install needs a"
+echo "   ONE-TIME internet connection, or it stops near 50% with"
+echo '   "An error occurred installing macOS".'
+echo " - If the firmware already matches, it installs fully offline."
+{epoch_line}
+echo
+echo "Safest move: connect Ethernet or Wi-Fi in Recovery before installing."
+echo "It is only used if a firmware update is actually needed, harmless otherwise."
+'''
+
+
 def write_markers_from_app(app_on_volume: Path, volume_root: Path,
                            build_version: str | None = None) -> None:
     """Synthesize the root markers for a pkg-sourced build (written as root).

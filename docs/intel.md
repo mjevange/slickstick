@@ -260,10 +260,16 @@ e.g. re-installing the same or an older macOS release than the Mac last ran. Onl
 is online-only. (Our mini demanded a bump for Sonoma 14, so its firmware is below 14's
 minimum; an offline install of an older release it already satisfies should complete.)
 
-**Implied product behavior (planned):** SlickStick/Recovery should read the current bridgeOS
-and the target's required minimum and either proceed fully offline or surface a clear
-"this install needs a one-time online firmware step" message — instead of failing opaquely at
-~50% with Code 561. See [[slickstick-backlog]].
+**Product behavior:** the from-scratch Intel full-installer build now **warns** about the T2
+firmware step at the end of a build (what the ~50% "An error occurred" failure means and the
+"connect Ethernet/Wi-Fi in Recovery and re-run" fix), prints the **exact ready-to-paste
+`startosinstall` command** for the stick, and ships a **`firmware-check`** helper at the stick
+root: run it in the Recovery Terminal and it reads the Mac's current bridgeOS via
+`/usr/libexec/remotectl dumpstate` and advises whether this install will need the network. It
+stays advisory (T2 firmware is Apple-personalized and point-release bumps exist, so the only
+guaranteed-safe rule is "if in doubt, connect the network — it's used only if a bump is
+needed"). A precise auto-gate (compare current vs required and branch) remains future work.
+See [[slickstick-backlog]].
 
 Sources: newosxbook.com/articles/BridgeOS.html; eclecticlight.co (UpdateBrain / "install
 personalised" / nonces); groups.google.com/g/munki-dev/c/3ixXsCbHUTM (startosinstall ignores
