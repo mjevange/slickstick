@@ -260,16 +260,25 @@ e.g. re-installing the same or an older macOS release than the Mac last ran. Onl
 is online-only. (Our mini demanded a bump for Sonoma 14, so its firmware is below 14's
 minimum; an offline install of an older release it already satisfies should complete.)
 
-**Product behavior:** the from-scratch Intel full-installer build now **warns** about the T2
-firmware step at the end of a build (what the ~50% "An error occurred" failure means and the
-"connect Ethernet/Wi-Fi in Recovery and re-run" fix), prints the **exact ready-to-paste
-`startosinstall` command** for the stick, and ships a **`firmware-check`** helper at the stick
-root: run it in the Recovery Terminal and it reads the Mac's current bridgeOS via
-`/usr/libexec/remotectl dumpstate` and advises whether this install will need the network. It
-stays advisory (T2 firmware is Apple-personalized and point-release bumps exist, so the only
-guaranteed-safe rule is "if in doubt, connect the network — it's used only if a bump is
-needed"). A precise auto-gate (compare current vs required and branch) remains future work.
-See [[slickstick-backlog]].
+**Installing from the stick.** The Terminal/`startosinstall` step turned out to be
+unnecessary: boot the stick (hold Option) and pick it, then in **macOS Utilities** choose
+**"Reinstall macOS [version]" → Continue → select the target disk** — it installs **offline**
+from the bundled payload, no Terminal (confirmed on a T2 2018 mini, 2026-11-20). Use **Disk
+Utility** in that same window to erase/repartition the target first if needed.
+
+The stick also carries a **`firmware-check`** helper (run `bash /Volumes/<name>/firmware-check`
+in Utilities ▸ Terminal): it reports whether the Mac is a T2 and gives honest advice on the
+firmware step. It does **not** try to predict offline-safety from version numbers — real data
+showed that lies (a Sonoma install failed offline at a bridgeOS the version math called "new
+enough," because a same-era *point* update was required). So it says the one always-correct
+thing: have the network available (used only if an update is actually needed), and if the
+install stalls near 50% with "An error occurred installing macOS", connect and retry.
+
+**Fallback** (rare Macs where Utilities doesn't offer the local install): the manual command
+still works —
+`"/Volumes/<name>/Install macOS <ver>.app/Contents/Resources/startosinstall" --agreetolicense
+--volume /Volumes/<target>`. The stick often mounts as `/Volumes/Untitled` in recovery; run
+`ls /Volumes` to confirm the name.
 
 Sources: newosxbook.com/articles/BridgeOS.html; eclecticlight.co (UpdateBrain / "install
 personalised" / nonces); groups.google.com/g/munki-dev/c/3ixXsCbHUTM (startosinstall ignores
