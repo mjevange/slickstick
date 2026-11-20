@@ -1156,8 +1156,8 @@ def _wizard_collect(args) -> dict:
     # check a supplied pkg against the target Mac) before anything else.
     ui.heading("\nTarget Mac architecture?")
     arch = "silicon" if _menu([
-        "Apple Silicon (M1/M2/M3/… — proven)",
-        "Intel (recovery stick proven; or clone a full installer)",
+        "Apple Silicon (M1/M2/M3/M4/M5)",
+        "Intel (pre-T2 / T2)",
     ]) == 0 else "intel"
     if arch == "intel":
         return _wizard_intel()
@@ -1272,7 +1272,7 @@ def build_parser() -> argparse.ArgumentParser:
     b = sub.add_parser("build", help="flag-driven build (advanced / scripting)")
     b.add_argument("-d", "--device", help="target disk, e.g. /dev/sdb (prompted if omitted)")
     b.add_argument("--arch", choices=["silicon", "intel"], default="silicon",
-                   help="silicon, or intel (recovery + clone, proven on pre-T2 Macs)")
+                   help="target Mac architecture: silicon (M1/M2/M3/M4/M5) or intel (pre-T2 / T2)")
     b.add_argument("--strategy", choices=["copy", "stream"], default="copy",
                    help="copy: extract to the work dir then copy onto the USB (default). "
                         "stream: write straight onto the USB from the pkg (~0 scratch space)")
