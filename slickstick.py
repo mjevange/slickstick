@@ -640,10 +640,19 @@ def _run_intel_full(target: str, label: str, yes: bool, dmg: Path | None = None,
         elif not no_cache:
             ui.info("Cleaned up the downloaded files (re-downloaded if you build again).")
     ui.ok(f"Finished — {target} is unmounted and safe to unplug.")
+    app_name = payload.pkg_app_name(pkg) or "Install macOS *"
     print("  Boot it on the Intel Mac (hold Option); it lands in Recovery/Utilities.")
-    print("  Open Utilities ▸ Terminal and install offline onto a target volume:")
-    print('    "/Volumes/<installer>/Install macOS *.app/Contents/Resources/'
-          'startosinstall" --agreetolicense --volume /Volumes/<target>')
+    print("  Open Utilities ▸ Terminal and run (use your erase-target's name for <target>):")
+    print(f'    "/Volumes/{label}/{app_name}.app/Contents/Resources/startosinstall" '
+          '--agreetolicense --volume /Volumes/<target>')
+    print()
+    ui.warn("T2 Macs (2018+) may need a ONE-TIME internet connection during install.")
+    print("  A T2 updates its own firmware (bridgeOS) during install and fetches it from")
+    print("  Apple. If the install stops around 50% with \"An error occurred installing")
+    print("  macOS\", connect Ethernet/Wi-Fi in Recovery and re-run — it only needs the")
+    print("  network for that firmware step. Pre-T2 Macs, and T2 Macs whose firmware already")
+    print("  meets this macOS, install fully offline. Run \"firmware-check\" on the stick to")
+    print("  see which case applies to your Mac.")
     return 0
 
 
