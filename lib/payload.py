@@ -132,6 +132,11 @@ def pkg_app_name(pkg: Path) -> str | None:
     return m.group(1) if m else None
 
 
+def short_os_name(name: str | None) -> str:
+    """'Install macOS Sonoma' / None -> 'Sonoma' (falls back to 'macOS')."""
+    return (name or "macOS").replace("Install macOS ", "").strip() or "macOS"
+
+
 def firmware_check_script(app_name: str | None) -> str:
     """Return a self-contained shell script for the Intel installer stick that
     reports whether the target Mac is a T2 (whose firmware updates during install
@@ -146,7 +151,7 @@ def firmware_check_script(app_name: str | None) -> str:
     have the network available; it's used only if an update is actually needed.
     ``app_name`` (e.g. "Install macOS Sonoma") is used only for the header.
     """
-    name = (app_name or "macOS").replace("Install macOS ", "").strip() or "macOS"
+    name = short_os_name(app_name)
     return f'''#!/bin/bash
 # SlickStick firmware-check: will installing {name} on THIS Mac need the internet?
 # Run it in the macOS Recovery Terminal before installing.

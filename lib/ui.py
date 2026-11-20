@@ -70,10 +70,6 @@ def banner() -> None:
 
 
 # --- messages ---------------------------------------------------------------
-def title(text: str) -> None:
-    print(f"{BOLD}{CYAN}{text}{RESET}")
-
-
 def heading(text: str) -> None:
     print(f"{BOLD}{text}{RESET}")
 

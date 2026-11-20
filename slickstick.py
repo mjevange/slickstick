@@ -36,8 +36,21 @@ DEFAULT_LABEL = "Install macOS"
 
 
 def _human(nbytes: int) -> str:
+    # Decimal GB — matches how drives are advertised (cf. ui.human, which is binary).
     gb = int(nbytes) / 1e9
     return f"{gb:.1f} GB"
+
+
+def _disk_row(d: dict, idx: str = "") -> str:
+    """One device line: '[idx] /dev/sdX  SIZE  MODEL' (idx is a pre-rendered prefix)."""
+    model = (d.get("model") or "").strip()
+    lead = f"  {idx} " if idx else "  "
+    return f"{lead}/dev/{d['name']:<6} {_human(d['size']):>9}  {model}"
+
+
+def _recovery_menu_opts() -> list[str]:
+    """Menu labels for the recovery version picker (name + Mac-year note)."""
+    return [f'{v["name"]} — {v["note"]}' for v in recovery.RECOVERY_VERSIONS]
 
 
 def cmd_deps(args) -> int:
@@ -53,8 +66,7 @@ def cmd_devices(args) -> int:
         return 1
     print("Removable / USB disks:")
     for d in disks:
-        model = (d.get("model") or "").strip()
-        print(f"  /dev/{d['name']:<6} {_human(d['size']):>9}  {model}")
+        print(_disk_row(d))
     return 0
 
 
@@ -213,7 +225,7 @@ def _pick_device(disks: list[dict], allow_nav: bool = False) -> str | None:
     ui.heading("Removable / USB disks:")
     for i, d in enumerate(disks):
         idx = f"{ui.CYAN}{ui.BOLD}[{i}]{ui.RESET}"
-        print(f"  {idx} /dev/{d['name']:<6} {_human(d['size']):>9}  {(d.get('model') or '').strip()}")
+        print(_disk_row(d, idx))
     tail = "number" + (", s = start over" if allow_nav else "") + ", blank = cancel"
     while True:
         try:
@@ -649,7 +661,7 @@ def _run_intel_full(target: str, label: str, yes: bool, dmg: Path | None = None,
         elif not no_cache:
             ui.info("Cleaned up the downloaded files (re-downloaded if you build again).")
     _finish_line(target)
-    name = (payload.pkg_app_name(pkg) or "macOS").replace("Install macOS ", "").strip() or "macOS"
+    name = payload.short_os_name(payload.pkg_app_name(pkg))
     print("  Boot it on the Intel Mac (hold Option), pick this stick, then in macOS")
     print(f'  Utilities choose "Reinstall macOS {name}" ▸ Continue ▸ pick the target')
     print("  disk. It installs offline from the stick — no Terminal. (Erase or")
@@ -876,7 +888,7 @@ def _wizard_intel_recovery() -> dict:
     print("  stick (boots to macOS Recovery -> reinstall macOS over the internet).")
     ui.heading("\nWhich macOS version?")
     print("  Pick the newest macOS your target Mac supports.")
-    opts = [f'{v["name"]} — {v["note"]}' for v in recovery.RECOVERY_VERSIONS]
+    opts = _recovery_menu_opts()
     opts.append("Let my Mac pick the newest it supports (I'll enter its board-id)")
     sel = _menu(opts, "  Version")
     if sel < len(recovery.RECOVERY_VERSIONS):
@@ -945,7 +957,7 @@ def _wizard_intel_full_download() -> dict:
     No board-id typing — the version maps to a board-id behind the scenes."""
     ui.heading("\nWhich macOS version? (must boot your target Intel Mac)")
     print("  Pick the newest macOS your target Mac supports.")
-    opts = [f'{v["name"]} — {v["note"]}' for v in recovery.RECOVERY_VERSIONS]
+    opts = _recovery_menu_opts()
     sel = _menu(opts, "  Version")
     v = recovery.RECOVERY_VERSIONS[sel]
     major = int(re.search(r"\((\d+)\)", v["name"]).group(1))
@@ -1034,7 +1046,7 @@ def _wizard_download_only() -> dict:
     want_recovery = which in (1, 2)
     ui.heading("\nWhich macOS version?")
     print("  Pick the newest macOS your target Mac supports.")
-    opts = [f'{v["name"]} — {v["note"]}' for v in recovery.RECOVERY_VERSIONS]
+    opts = _recovery_menu_opts()
     v = recovery.RECOVERY_VERSIONS[_menu(opts, "  Version")]
     major = int(re.search(r"\((\d+)\)", v["name"]).group(1))
     raw = _input_path("\n  Download to which folder "
@@ -1138,8 +1150,7 @@ def _wizard_verify() -> int:
     ui.heading("\nWhich stick should I check?  (read-only — nothing is erased)")
     for i, d in enumerate(disks):
         idx = f"{ui.CYAN}{ui.BOLD}[{i}]{ui.RESET}"
-        print(f"  {idx} /dev/{d['name']:<6} {_human(d['size']):>9}  "
-              f"{(d.get('model') or '').strip()}")
+        print(_disk_row(d, idx))
     while True:
         try:
             sel = input(f"Pick a disk [0-{len(disks) - 1}], blank = cancel: ").strip()

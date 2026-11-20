@@ -418,6 +418,34 @@ _HFS_INTERNAL = [".journal", ".journal_info_block", ".Spotlight-V100",
                  ".fseventsd", ".HFS+ Private Directory Data", ".HFS+ Private Data"]
 
 
+def _bsdtar_clone(src: Path, dst: Path) -> None:
+    """Pipe-copy an HFS+ tree src -> dst, skipping per-volume internal/cache dirs."""
+    excl = " ".join(f"--exclude {shlex.quote('./' + e)}" for e in _HFS_INTERNAL)
+    _run(["bash", "-c",
+          f"cd {shlex.quote(str(src))} && "
+          f"sudo bsdtar -cf - {excl} . | sudo bsdtar -xpf - -C {shlex.quote(str(dst))}"])
+    subprocess.run(["sudo", "sync"])
+
+
+def _bless_targets(dst: Path):
+    """(folder_cnid, file_cnid) to bless boot.efi at the conventional path, or None."""
+    from . import bless
+    boot_efi = dst / "System" / "Library" / "CoreServices" / "boot.efi"
+    if boot_efi.exists():
+        return (bless.cnid(boot_efi.parent), bless.cnid(boot_efi))
+    return None
+
+
+def _apply_bless(hfs: str, targets) -> None:
+    """Patch finderInfo to bless boot.efi (optional T2 insurance); no-op if None."""
+    if not targets:
+        return
+    from . import bless
+    f_cnid, b_cnid = targets
+    bless.patch_finderinfo(hfs, {0: f_cnid, 1: b_cnid, 5: f_cnid})
+    ui.ok(f"blessed boot.efi (optional T2 insurance): folder={f_cnid} file={b_cnid}")
+
+
 def build_intel_clone(target: str, stick_root: Path, work: Path, hfs_label: str) -> None:
     """Clone a full createinstallmedia stick onto ``target`` for an Intel Mac.
 
@@ -433,8 +461,6 @@ def build_intel_clone(target: str, stick_root: Path, work: Path, hfs_label: str)
     tree on Linux, so this path requires a real createinstallmedia stick to clone.
     See intel-oracle.md.
     """
-    from . import bless
-
     ui.step(1, 4, "Partitioning (GPT: ESP + Apple HFS+)")
     esp, hfs = partition(target, hfs_label)
     ui.step(2, 4, "Formatting (empty ESP + HFS+)")
@@ -445,23 +471,14 @@ def build_intel_clone(target: str, stick_root: Path, work: Path, hfs_label: str)
     _mount(hfs, dst, ro=False)
     bless_targets = None
     try:
-        excl = " ".join(f"--exclude {shlex.quote('./' + e)}" for e in _HFS_INTERNAL)
-        _run(["bash", "-c",
-              f"cd {shlex.quote(str(stick_root))} && "
-              f"sudo bsdtar -cf - {excl} . | sudo bsdtar -xpf - -C {shlex.quote(str(dst))}"])
-        subprocess.run(["sudo", "sync"])
-        boot_efi = dst / "System" / "Library" / "CoreServices" / "boot.efi"
-        if boot_efi.exists():
-            bless_targets = (bless.cnid(boot_efi.parent), bless.cnid(boot_efi))
-        else:
+        _bsdtar_clone(stick_root, dst)
+        bless_targets = _bless_targets(dst)
+        if bless_targets is None:
             ui.warn("no System/Library/CoreServices/boot.efi copied — is the source a "
                     "full createinstallmedia stick? (Intel needs the expanded tree)")
     finally:
         _umount(dst)
-    if bless_targets:
-        f_cnid, b_cnid = bless_targets
-        bless.patch_finderinfo(hfs, {0: f_cnid, 1: b_cnid, 5: f_cnid})
-        ui.ok(f"blessed boot.efi (optional T2 insurance): folder={f_cnid} file={b_cnid}")
+    _apply_bless(hfs, bless_targets)
     ui.step(4, 4, "Verifying")
     if verify(hfs):
         ui.ok("Volume verified.")
@@ -494,7 +511,7 @@ def build_recovery(target: str, basesystem_dmg: Path, work: Path, hfs_label: str
     One stick, pkg-free. PROVEN on hardware (2026-11-16: a Monterey recovery stick
     built on Linux booted a real Intel iMac into macOS Recovery).
     """
-    from . import bless, udif
+    from . import udif
 
     raw = work / "basesystem.img"
     src = work / "src_ro"
@@ -518,15 +535,9 @@ def build_recovery(target: str, basesystem_dmg: Path, work: Path, hfs_label: str
         _mount(hfs, dst, ro=False)
         bless_targets = None
         try:
-            excl = " ".join(f"--exclude {shlex.quote('./' + e)}" for e in _HFS_INTERNAL)
-            _run(["bash", "-c",
-                  f"cd {shlex.quote(str(src))} && "
-                  f"sudo bsdtar -cf - {excl} . | sudo bsdtar -xpf - -C {shlex.quote(str(dst))}"])
-            subprocess.run(["sudo", "sync"])
-            boot_efi = dst / "System" / "Library" / "CoreServices" / "boot.efi"
-            if boot_efi.exists():
-                bless_targets = (bless.cnid(boot_efi.parent), bless.cnid(boot_efi))
-            else:
+            _bsdtar_clone(src, dst)
+            bless_targets = _bless_targets(dst)
+            if bless_targets is None:
                 ui.warn("no boot.efi in the recovery — unexpected for a BaseSystem")
             # Branded icon in the Intel Startup Manager (it reads .VolumeIcon.icns).
             # The recovery ships a *dangling* .VolumeIcon.icns symlink -> a generic
@@ -539,10 +550,7 @@ def build_recovery(target: str, basesystem_dmg: Path, work: Path, hfs_label: str
                 ui.ok("added the installer's volume icon (branded)")
         finally:
             _umount(dst)
-        if bless_targets:
-            f_cnid, b_cnid = bless_targets
-            bless.patch_finderinfo(hfs, {0: f_cnid, 1: b_cnid, 5: f_cnid})
-            ui.ok(f"blessed boot.efi (optional T2 insurance): folder={f_cnid} file={b_cnid}")
+        _apply_bless(hfs, bless_targets)
     finally:
         subprocess.run(["sudo", "umount", str(src)])
         subprocess.run(["sudo", "losetup", "-d", loop])
@@ -571,7 +579,7 @@ def build_intel_full(target: str, basesystem_dmg: Path, pkg: Path,
     booted a pre-T2 iMac and installed offline to a running desktop (2026-11-17/18),
     and booted a T2 2018 Mac mini (Cryptex era). See docs/intel.md.
     """
-    from . import bless, udif
+    from . import udif
     repo_root = Path(__file__).resolve().parent.parent
 
     raw = work / "basesystem.img"
@@ -596,11 +604,7 @@ def build_intel_full(target: str, basesystem_dmg: Path, pkg: Path,
         bless_targets = None
         try:
             ui.step(4, 6, "Copying the bootable recovery system onto the USB")
-            excl = " ".join(f"--exclude {shlex.quote('./' + e)}" for e in _HFS_INTERNAL)
-            _run(["bash", "-c",
-                  f"cd {shlex.quote(str(src))} && "
-                  f"sudo bsdtar -cf - {excl} . | sudo bsdtar -xpf - -C {shlex.quote(str(dst))}"])
-            subprocess.run(["sudo", "sync"])
+            _bsdtar_clone(src, dst)
 
             ui.step(5, 6, "Overlaying the Install app + SharedSupport payload (~12 GB)")
             app = stream_app_to_target(pkg, dst, repo_root)
@@ -611,17 +615,12 @@ def build_intel_full(target: str, basesystem_dmg: Path, pkg: Path,
             _flushing_note()
             subprocess.run(["sudo", "sync"])
 
-            boot_efi = dst / "System" / "Library" / "CoreServices" / "boot.efi"
-            if boot_efi.exists():
-                bless_targets = (bless.cnid(boot_efi.parent), bless.cnid(boot_efi))
-            else:
+            bless_targets = _bless_targets(dst)
+            if bless_targets is None:
                 ui.warn("no boot.efi in the recovery — unexpected for a BaseSystem")
         finally:
             _umount(dst)
-        if bless_targets:
-            f_cnid, b_cnid = bless_targets
-            bless.patch_finderinfo(hfs, {0: f_cnid, 1: b_cnid, 5: f_cnid})
-            ui.ok(f"blessed boot.efi (optional T2 insurance): folder={f_cnid} file={b_cnid}")
+        _apply_bless(hfs, bless_targets)
     finally:
         subprocess.run(["sudo", "umount", str(src)])
         subprocess.run(["sudo", "losetup", "-d", loop])

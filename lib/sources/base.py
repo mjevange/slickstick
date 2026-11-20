@@ -47,7 +47,3 @@ class Source(abc.ABC):
         write-straight-to-USB strategy (much smaller). 0 for sources that need no
         work dir at all."""
         return 0
-
-    def list_versions(self) -> list[str]:  # optional
-        """Return selectable version strings, if the backend supports it."""
-        return []
