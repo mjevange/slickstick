@@ -158,6 +158,18 @@ def unmount_disk(disk: str) -> None:
         walk(d)
 
 
+def power_off(disk: str) -> bool:
+    """Best-effort eject/power-off of a finished (already-unmounted) USB disk so it
+    can be pulled safely. Flushes, then `udisksctl power-off` (no sudo, cooperates
+    with the auto-mounter, like _umount_path). Returns True on success; False if it
+    couldn't power the device off — it's unmounted and safe to remove either way."""
+    subprocess.run(["sync"])
+    if shutil.which("udisksctl"):
+        return subprocess.run(["udisksctl", "power-off", "-b", disk],
+                              capture_output=True).returncode == 0
+    return False
+
+
 def unmount_if_mounted(part: str) -> None:
     """Unmount a single partition if a desktop auto-mounted it."""
     mp = subprocess.run(["lsblk", "-no", "MOUNTPOINT", part],

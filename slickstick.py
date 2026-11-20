@@ -259,6 +259,15 @@ def _default_work_base() -> Path:
     return base
 
 
+def _finish_line(target: str) -> None:
+    """Best-effort eject the (already-unmounted) USB and print the shared finished
+    line, so the user knows it's physically safe to pull."""
+    if usb.power_off(target):
+        ui.ok(f"Finished — {target} is ejected; safe to remove.")
+    else:
+        ui.ok(f"Finished — {target} is unmounted; safe to remove.")
+
+
 def _input_path(prompt: str) -> str:
     """input() with Tab filesystem-path completion (spaces supported). Falls back
     to a plain input if readline isn't available."""
@@ -443,7 +452,7 @@ def _execute_build(target: str, source, arch: str, reference_stick: str | None,
 
     print()
     usb.unmount_disk(target)
-    ui.ok(f"Finished — {target} is unmounted and safe to unplug.")
+    _finish_line(target)
     print("  Test by booting it on the target Mac (hold power -> Options).")
     return 0
 
@@ -481,7 +490,7 @@ def _run_recovery(target: str, label: str, yes: bool, dmg: Path | None = None,
         print(f"Build failed: {e}")
         return 1
     print()
-    ui.ok(f"Finished — {target} is unmounted and safe to unplug.")
+    _finish_line(target)
     print("  Boot it on the Intel Mac: hold Option, pick the recovery.")
     return 0
 
@@ -639,20 +648,17 @@ def _run_intel_full(target: str, label: str, yes: bool, dmg: Path | None = None,
                     f"(reused automatically next run).")
         elif not no_cache:
             ui.info("Cleaned up the downloaded files (re-downloaded if you build again).")
-    ui.ok(f"Finished — {target} is unmounted and safe to unplug.")
-    app_name = payload.pkg_app_name(pkg) or "Install macOS *"
-    print("  Boot it on the Intel Mac (hold Option); it lands in Recovery/Utilities.")
-    print("  Open Utilities ▸ Terminal and run (use your erase-target's name for <target>):")
-    print(f'    "/Volumes/{label}/{app_name}.app/Contents/Resources/startosinstall" '
-          '--agreetolicense --volume /Volumes/<target>')
+    _finish_line(target)
+    name = (payload.pkg_app_name(pkg) or "macOS").replace("Install macOS ", "").strip() or "macOS"
+    print("  Boot it on the Intel Mac (hold Option), pick this stick, then in macOS")
+    print(f'  Utilities choose "Reinstall macOS {name}" ▸ Continue ▸ pick the target')
+    print("  disk. It installs offline from the stick — no Terminal. (Erase or")
+    print("  repartition the target first with Disk Utility in that same window.)")
     print()
-    ui.warn("T2 Macs (2018+) may need a ONE-TIME internet connection during install.")
-    print("  A T2 updates its own firmware (bridgeOS) during install and fetches it from")
-    print("  Apple. If the install stops around 50% with \"An error occurred installing")
-    print("  macOS\", connect Ethernet/Wi-Fi in Recovery and re-run — it only needs the")
-    print("  network for that firmware step. Pre-T2 Macs, and T2 Macs whose firmware already")
-    print("  meets this macOS, install fully offline. Run \"firmware-check\" on the stick to")
-    print("  see which case applies to your Mac.")
+    ui.warn("T2 Macs (2018+) may need a one-time internet connection during install")
+    print("  (the T2 pulls a firmware update from Apple). If it stalls ~50% at \"An error")
+    print("  occurred installing macOS\", connect Ethernet/Wi-Fi and retry. Pre-flight in")
+    print("  Utilities ▸ Terminal: bash \"/Volumes/<name>/firmware-check\".")
     return 0
 
 
