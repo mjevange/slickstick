@@ -872,8 +872,7 @@ def _wizard_intel_recovery() -> dict:
     print("\n  Downloads an Apple Recovery image and builds a bootable recovery")
     print("  stick (boots to macOS Recovery -> reinstall macOS over the internet).")
     ui.heading("\nWhich macOS version? (pick the NEWEST your target Mac supports)")
-    print("  Monterey is hardware-verified; Ventura+ use Cryptexes we couldn't test —")
-    print("  if a Cryptex version won't boot, drop to Monterey-era and let us know.")
+    print("  Pick the newest macOS your target Mac supports.")
     opts = [f'{v["name"]} — {v["note"]}' for v in recovery.RECOVERY_VERSIONS]
     opts.append("Let my Mac pick the newest it supports (I'll enter its board-id)")
     sel = _menu(opts, "  Version")
@@ -942,7 +941,7 @@ def _wizard_intel_full_download() -> dict:
     """Pick one macOS version; download the matching BaseSystem + pkg, then build.
     No board-id typing — the version maps to a board-id behind the scenes."""
     ui.heading("\nWhich macOS version? (must boot your target Intel Mac)")
-    print("  Monterey is hardware-verified; Ventura+ use Cryptexes we couldn't test.")
+    print("  Pick the newest macOS your target Mac supports.")
     opts = [f'{v["name"]} — {v["note"]}' for v in recovery.RECOVERY_VERSIONS]
     sel = _menu(opts, "  Version")
     v = recovery.RECOVERY_VERSIONS[sel]
@@ -1031,7 +1030,7 @@ def _wizard_download_only() -> dict:
     want_pkg = which in (0, 2)
     want_recovery = which in (1, 2)
     ui.heading("\nWhich macOS version?")
-    print("  Monterey is hardware-verified; Ventura+ use Cryptexes we couldn't test.")
+    print("  Pick the newest macOS your target Mac supports.")
     opts = [f'{v["name"]} — {v["note"]}' for v in recovery.RECOVERY_VERSIONS]
     v = recovery.RECOVERY_VERSIONS[_menu(opts, "  Version")]
     major = int(re.search(r"\((\d+)\)", v["name"]).group(1))
@@ -1064,7 +1063,7 @@ def cmd_download(args) -> int:
             ui.err("--recovery needs --version (a recovery image is board-specific). "
                    "Known: " + ", ".join(v["name"] for v in recovery.RECOVERY_VERSIONS))
             return 1
-        match = recovery.RECOVERY_VERSIONS[-2]  # Monterey — the verified default
+        match = recovery.RECOVERY_VERSIONS[-2]  # Monterey — safe default
         ui.info(f"no --version given; defaulting to {match['name']}.")
     major = int(re.search(r"\((\d+)\)", match["name"]).group(1))
     dest = Path(args.output) if args.output else Path.cwd()

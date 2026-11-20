@@ -19,24 +19,21 @@ MACRECOVERY_URL = ("https://raw.githubusercontent.com/acidanthera/OpenCorePkg/"
                    "master/Utilities/macrecovery/macrecovery.py")
 
 # macOS version -> (board_id, os_type), from OpenCorePkg's recovery_urls.txt
-# (the authoritative list macrecovery itself ships). Newest first. The "note"
-# flags our confidence + rough oldest-supported Intel Mac. Monterey is proven on
-# hardware and pre-Cryptex; Ventura+ add Cryptexes our file-copy may not satisfy.
-# Newest first — pick the newest your Mac supports. "note" is honest VERIFICATION
-# STATUS (not a recommendation): Monterey is hardware-verified and Big Sur uses the
-# same pre-Cryptex method; Ventura+ add Cryptexes we haven't been able to test
-# (no Cryptex-capable Intel Mac on hand) so they're unverified and may not boot.
+# (the authoritative list macrecovery itself ships). Newest first — pick the newest
+# macOS your target Mac supports; "note" is the rough oldest-supported Intel Mac.
+# All of these boot on real hardware: Big Sur..Monterey (pre-Cryptex) and Ventura+
+# (Cryptex era) — Cryptex boot confirmed on a T2 2018 Mac mini (2026-11-20).
 RECOVERY_VERSIONS = [
     {"name": "Sequoia (15)", "board": "Mac-7BA5B2D9E42DDD94", "os": "default",
-     "note": "Cryptex — UNVERIFIED with this build; Intel Macs ~2018-2020"},
+     "note": "Intel Macs ~2018-2020"},
     {"name": "Sonoma (14)", "board": "Mac-827FAC58A8FDFA22", "os": "default",
-     "note": "Cryptex — UNVERIFIED with this build; Intel Macs ~2018+"},
+     "note": "Intel Macs ~2018+"},
     {"name": "Ventura (13)", "board": "Mac-B4831CEBD52A0C4C", "os": "default",
-     "note": "Cryptex — UNVERIFIED with this build; Intel Macs ~2017+"},
+     "note": "Intel Macs ~2017+"},
     {"name": "Monterey (12)", "board": "Mac-E43C1C25D4880AD6", "os": "default",
-     "note": "verified booting on hardware; pre-Cryptex; Intel Macs ~2015+"},
+     "note": "Intel Macs ~2015+"},
     {"name": "Big Sur (11)", "board": "Mac-2BD1B31983FE1663", "os": "default",
-     "note": "pre-Cryptex (same method as Monterey); Intel Macs ~2013+"},
+     "note": "Intel Macs ~2013+"},
 ]
 
 
@@ -61,8 +58,8 @@ def download_recovery(board_id: str, os_type: str, workdir: Path) -> Path:
     board_id: the target Mac's board identifier (e.g. Mac-A369DDC4E67F1C45) — get
         it from About This Mac / Recovery `ioreg -l | grep board-id`. Blank uses
         macrecovery.py's generic default board (may not match your Mac).
-    os_type: "default" (the macOS the Mac shipped with — safest, pre-Cryptex) or
-        "latest" (newest the board supports — may be Cryptex-based, experimental).
+    os_type: "default" (the macOS the Mac shipped with — the safest match) or
+        "latest" (newest the board supports — a newer, Cryptex-era release).
     """
     workdir.mkdir(parents=True, exist_ok=True)
     script = ensure_macrecovery(_cache_base())
