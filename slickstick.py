@@ -857,8 +857,8 @@ def _wizard_intel() -> dict:
     ui.heading("\nHow should SlickStick build the Intel stick?")
     choice = _menu([
         "Download macOS Recovery from Apple (proven — boots real Intel Macs, 1 stick)",
-        "Clone an inserted createinstallmedia stick (full offline installer, experimental)",
-        "Full offline installer from a BaseSystem.dmg + a .pkg (no Mac, no clone — experimental)",
+        "Clone an inserted createinstallmedia stick (full offline installer)",
+        "Full offline installer from a BaseSystem.dmg + a .pkg (no Mac, no clone)",
     ])
     if choice == 0:
         return _wizard_intel_recovery()

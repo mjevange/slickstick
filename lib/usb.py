@@ -418,9 +418,10 @@ def build_intel_clone(target: str, stick_root: Path, work: Path, hfs_label: str)
 
     Bless is NOT required on old Intel Macs (recognition is by the conventional
     boot.efi path — verified on hardware 2026-11-16); we set it anyway as harmless
-    insurance for T2 Macs. EXPERIMENTAL: structure-validated; boot-test on real
-    Intel hardware. Modern-macOS pkg sources can't produce this tree on Linux, so
-    this path requires a real createinstallmedia stick to clone. See intel-oracle.md.
+    insurance for T2 Macs. PROVEN on hardware (2026-11-16: a Monterey clone booted an
+    Intel iMac into the full installer). Modern-macOS pkg sources can't produce this
+    tree on Linux, so this path requires a real createinstallmedia stick to clone.
+    See intel-oracle.md.
     """
     from . import bless
 
@@ -480,7 +481,8 @@ def build_recovery(target: str, basesystem_dmg: Path, work: Path, hfs_label: str
     result carries ``boot.efi`` at the conventional path, which a real Intel Mac
     boots (no OpenCore; bless optional — see intel-oracle.md / docs/intel.md).
 
-    One stick, pkg-free. EXPERIMENTAL: pipeline validated; boot-test on Intel.
+    One stick, pkg-free. PROVEN on hardware (2026-11-16: a Monterey recovery stick
+    built on Linux booted a real Intel iMac into macOS Recovery).
     """
     from . import bless, udif
 
@@ -555,10 +557,9 @@ def build_intel_full(target: str, basesystem_dmg: Path, pkg: Path,
         the installer expects), i.e. the offline OS payload
 
     The booted recovery's ``startosinstall`` then installs macOS offline from that
-    SharedSupport — no UpdateBrain, no network. Validated on a pre-T2 Intel iMac
-    (2026-11-17: startosinstall accepted the media and ran the install); a clean
-    install-to-desktop finish is still being confirmed, so this path is
-    EXPERIMENTAL. See docs/intel.md.
+    SharedSupport — no UpdateBrain, no network. PROVEN end to end: a web-built stick
+    booted a pre-T2 iMac and installed offline to a running desktop (2026-11-17/18),
+    and booted a T2 2018 Mac mini (Cryptex era). See docs/intel.md.
     """
     from . import bless, udif
     repo_root = Path(__file__).resolve().parent.parent
