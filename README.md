@@ -31,7 +31,7 @@ content copy over Linux's own `hfsplus` driver is enough. See
 | **Apple Silicon**, cloned from an installer stick (`--stick`) | ✅ **Proven** — boots to the installer |
 | **Apple Silicon**, from a pkg (synthesized markers) | ✅ **Proven** — lists (with icon) + boots on hardware |
 | **Intel** (recovery) | ✅ **Proven** — `build --recovery` builds an Apple Recovery stick on Linux (pkg-free, one stick) that **boots a real Intel Mac into Recovery**. See [docs/intel.md](docs/intel.md) |
-| **Intel** (full installer) | ✅ **Proven** — clone a `createinstallmedia` stick (`build_intel_clone`) → boots a real Intel Mac into the **full installer** (branded icon; bless not required). Modern pkg→Intel is blocked (sealed asset) |
+| **Intel** (full installer) | ✅ **Proven** — two ways: build a full offline installer from scratch on Linux (`build_intel_full`, no Mac, no clone) **or** clone a `createinstallmedia` stick (`build_intel_clone`). Both boot a real Intel Mac into the **full installer** (branded icon; bless not required); the from-scratch build has installed to completion offline on a pre-T2 Mac. See [docs/intel.md](docs/intel.md) |
 
 This is a tool for making install media for **Macs you own**. It **erases the
 target USB**, and the install steps on the Mac can erase a disk too.
@@ -174,7 +174,8 @@ network share).
 
 ## Installing on the Mac (Intel)
 
-Once the stick is built, do the install on the Mac itself:
+Once the stick is built — SlickStick ejects it when the build finishes, so it's
+safe to unplug — do the install on the Mac itself:
 
 1. **Boot it.** Power on holding **Option (⌥)**, pick the stick. (On a **T2** Mac you
    may first need to allow external boot: ⌘-R → **Startup Security Utility** → Reduced
@@ -292,8 +293,10 @@ booted into the macOS installer's Recovery Assistant** — the same behavior as 
 `createinstallmedia` stick. Theory proven: a bootable Apple Silicon installer,
 built with no Mac in the loop.
 
-*Scope:* both the stick-clone and pkg (synthesized-marker) paths are proven to
-**list + boot** on real hardware. Intel is open — see the [Status](#status--read-this) table.
+*Scope:* on Apple Silicon both the stick-clone and pkg (synthesized-marker)
+paths are proven to **list + boot** on real hardware. Intel is proven too —
+booted on a real Intel Mac, with the from-scratch full offline installer taken
+through a clean install on a pre-T2 Mac; see the [Status](#status--read-this) table.
 
 ## Safety
 

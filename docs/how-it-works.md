@@ -112,19 +112,28 @@ symlinks, attributes. Every difference is a lead. That's how the zero-bless and
 empty-ESP facts surfaced, and it's how the remaining unknowns (file attributes
 the Linux `hfsplus` driver may drop) would be run down if a build fails to boot.
 
-## Intel is different (and unverified)
+## Intel is different (but proven)
 
-Intel Macs *do* boot via EFI: the media needs `.IABootFiles` (with `boot.efi`,
-`prelinkedkernel`) **and** a real HFS+ bless pointing `finderInfo` at `boot.efi`
-— exactly the machinery Apple Silicon doesn't use. SlickStick's Intel path lays
-the content and attempts the bless via `lib/bless.py` (finderInfo is just eight
+Intel Macs boot via EFI, not the iBoot / `.IAPhysicalMedia` path Apple Silicon
+uses. In practice macOS's recovery and installer find `boot.efi` at the
+conventional path on the HFS+ volume and boot it — no explicit HFS+ bless turned
+out to be required. SlickStick still writes an optional bless via `lib/bless.py`
+as belt-and-suspenders insurance for T2 Macs (finderInfo is just eight
 big-endian `uint32`s at offset 1104 in the partition; CNIDs equal the inode
-numbers Linux reports). But generating `.IABootFiles` correctly is unsolved here,
-and **we have no Intel Mac to test on** — so the Intel path is a research
-artifact, loudly marked experimental. Contributions and test reports welcome.
+numbers Linux reports), but it is not load-bearing.
+
+All three Intel paths — **clone**, **recovery**, and the from-scratch **full
+offline installer** — are hardware-proven: built on Linux and booted on a real
+Intel Mac, with the full offline installer taken all the way through a clean
+install on a pre-T2 Mac. See [docs/intel.md](intel.md) for the full breakdown,
+including the Cryptex-era (Ventura+) boot confirmed on a T2 2018 Mac mini.
 
 ## Honest limits
 
-- Both the **stick-clone** and **pkg (synthesized-marker)** paths are proven to
-  **list + boot** on Apple Silicon; a full install to completion wasn't run.
-- **Intel** is unverified entirely.
+- On **Apple Silicon**, both the stick-clone and pkg (synthesized-marker) paths
+  are proven to list and boot on hardware; a full install run to completion is
+  still on the list.
+- On **Intel**, the full offline install is proven end to end on a pre-T2 Mac.
+  The one online-only case is a **T2 Mac that needs a bridgeOS firmware bump**
+  mid-install — it's fetched from Apple and can't be bundled (true of
+  `createinstallmedia` too). Pre-T2 Macs install fully offline.

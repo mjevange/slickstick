@@ -58,15 +58,15 @@ a folder you choose, to archive, inspect, or feed the "provide the files" build 
 1. **Clone** an existing `createinstallmedia` stick (`stick` source /
    `build_intel_clone`): copies the whole tree (skipping HFS+ internal/cache dirs)
    and optionally blesses it. Needs a stick someone already made on a Mac.
-   Wizard: **Intel → Clone from an inserted stick**.
+   Wizard: **Intel → Full offline installer → Clone an inserted createinstallmedia stick**.
 2. **Recovery** (`--recovery BaseSystem.dmg` / `build_recovery`): a one-stick,
    pkg-free *reinstall* stick from an Apple recovery image. Boots → downloads &
-   installs over the internet. Wizard: **Intel → Download macOS Recovery**.
+   installs over the internet. Wizard: **Intel → Recovery — downloads macOS during install**.
 3. **Full installer from scratch** (`--recovery BaseSystem.dmg --local <pkg>` /
    `build_intel_full`): combines a recovery `BaseSystem.dmg` (bootable root) with an
    `InstallAssistant.pkg` (app + whole-pkgdmg `SharedSupport.dmg`) into a one-stick
    **offline** full installer — no Mac, no clone. Wizard: **Intel → Full offline
-   installer**, then either **download both for me** (pick one macOS version — the
+   installer → Download & build from scratch**, then either **download both for me** (pick one macOS version — the
    BaseSystem comes from `macrecovery` by a behind-the-scenes board-id, the matching
    pkg from gibMacOS; no board typing) or **provide the two files** as paths.
    Downloaded files are cached under `~/.cache/slickstick/downloads` (keyed by
@@ -157,13 +157,15 @@ Plan: `7z` extract the raw HFS → loop-mount ro → partition+format the target
 (lib.udif) → loop-mount → partition/format → clone → bless → fsck — and it
 **booted a real Intel iMac into macOS Recovery** (orange "macOS Base System" icon
 in the Startup Manager). No OpenCore, no Mac, no pkg; bless included but not
-required. **Monterey** is the proven default today; for Ventura+ (which adds
-`System/Cryptexes/`), see the Cryptex recon below.
+required. **Monterey** is the default; the recovery / full-installer path is now
+proven into the Cryptex era too (Ventura / Sonoma / Sequoia) — a Sonoma stick
+booted a T2 2018 Mac mini, see the **T2 hardware results** section below.
 
-**Usage.** Wizard: pick **Intel → Download macOS Recovery from Apple**, give the
-target Mac's board-id (About This Mac → System Report, or Recovery Terminal
-`ioreg -l | grep board-id`), choose the shipped (safe) or newest (experimental)
-version, then the target USB. CLI with a pre-downloaded image:
+**Usage.** Wizard: pick **Intel → Recovery — downloads macOS during install**,
+give the target Mac's board-id (About This Mac → System Report, or Recovery
+Terminal `ioreg -l | grep board-id`), pick the newest macOS your target Mac
+supports (versions are labelled by rough Intel-Mac year), then the target USB.
+CLI with a pre-downloaded image:
 `slickstick build --device /dev/sdX --recovery path/to/BaseSystem.dmg`.
 
 (For *old*, pre–Big Sur macOS, the full installer used a simpler
@@ -187,10 +189,10 @@ with `lib.udif`, loop-mounted the "macOS Base System" HFS+ volume, and dissected
   conventional path proven on Monterey.
 
 So the Ventura recovery is a flat HFS+ volume whose Cryptexes are just files our
-`bsdtar` copy already carries. **Strong structural evidence the recovery path
-extends to Ventura+ unchanged** — pending the one thing Linux can't answer: a real
-boot (a 2018 Mac mini is ordered to confirm). Worst case, the recovery still boots
-to reinstall and only the Safari cryptex fails to verify — the core function works.
+`bsdtar` copy already carries. This was **strong structural evidence the recovery
+path extends to Ventura+ unchanged** — the one thing Linux alone couldn't finish
+was a real boot, and that is now **confirmed on T2 hardware** (next section): a
+Sonoma stick boots the 2018 Mac mini into recovery.
 
 ## T2 hardware results (2018 Mac mini, Macmini8,1) — Cryptex boot ✅, offline install ⛔
 
